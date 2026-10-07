@@ -69,3 +69,14 @@ details.trace li { margin: 2px 0; }
 .contacts li { display: flex; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
 .contacts .who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .contacts .remove { background: none; border: none; color: var(--muted); padding: 0 4px; font-size: 14px; }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin: 8px 0 10px; }
+.tab {
+  flex: 1; background: none; color: var(--muted); border: none; border-bottom: 2px solid transparent;
+  border-radius: 0; padding: 6px 4px; font-size: 13px; font-weight: 600;
+}
+.tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+.tab .badge { margin-left: 2px; }
+.hint { font-size: 12px; margin: 4px 0 8px; }
+.linked-job { display: flex; align-items: center; gap: 4px; font-size: 12px; margin: 4px 0 6px; }
+.linked-job #person-job-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.contacts .job { color: var(--muted); font-size: 11px; display: block; }

@@ -26,14 +26,32 @@ moving it removes the extension.
 
 ## Use it
 
-1. Open a job posting on LinkedIn (`linkedin.com/jobs/view/...`).
-2. Click the Sourcing Helper icon.
-3. Check the **Role** and **Company** it read. Edit either one if it's wrong, then click **Rebuild links**.
-4. Click any link to run that search in a new tab:
+The popup has three tabs. It opens on whichever one matches the page you're on.
+
+### Job: find the people behind a posting
+1. Open a job posting on LinkedIn (`linkedin.com/jobs/view/...`) and click the Sourcing Helper icon.
+2. Check the **Role** and **Company** it read. Edit either one if it's wrong, then click **Rebuild links**.
+3. Click any link to run that search in a new tab:
    - **Hiring manager posts:** people posting that they're hiring for this kind of role.
    - **Recruiters & people:** recruiters, the team named in the posting, and people doing the work.
-   - **Google X-ray:** wider Google searches over LinkedIn profiles and posts, with no operator limit.
-5. **Copy** puts the Boolean string on your clipboard so you can paste it into LinkedIn search yourself.
+4. With a People Data Labs key, **Find recruiters** lists actual people, each with a **Find email** button.
+
+### Person: find someone's email from their profile
+1. From one of those searches, open someone's LinkedIn profile and click the icon again.
+2. It reads their **name, headline, and company** from the page and fills them in. Fix anything
+   it got wrong.
+3. **Find email** runs the email waterfall (below) and saves them. **Save** saves them without
+   looking up an email.
+4. People are saved against the **last job you opened** in the Job tab (shown as "For job: ...").
+   Click × to save them without a job.
+
+It only reads the profile you're looking at, and only when you open the popup. It never visits
+profiles on its own.
+
+### Saved: everyone you've saved
+Click a name to open their profile. **Copy for Sheets** puts the list on your clipboard to paste
+into a Google Sheet; **Export CSV** downloads it. The columns (First Name, Last Name, Email,
+Title, Company, Job, ...) line up with Streak and other mail-merge tools.
 
 ## Optional: better results with API keys
 
@@ -48,7 +66,7 @@ Everything above works with no setup. Two optional keys, added under the ⚙︎ 
 
 ## Find emails (waterfall)
 
-Next to every People Data Labs result there's a **Find email** button (or **Find all emails** for the whole list). For someone you found through a LinkedIn search link instead, use **Find an email**: type their name, and add the company's email domain (like `stripe.com`) if you know it.
+**Find email** is on every People Data Labs result in the Job tab (plus **Find all emails** for the whole list), and on the **Person** tab for whoever's profile you have open. The company's email domain (like `stripe.com`) is optional; once one lookup at a company succeeds, it's remembered for the next person there.
 
 It tries sources in order and stops at the first address a verifier confirms:
 
@@ -67,7 +85,7 @@ Every result is labeled:
 
 **Keeping credit use low:** A verifier key is what makes this worthwhile, since without one nothing gets confirmed. Found emails, each company's format, and catch-all domains are remembered on your device, so the second person at a company usually costs one verification instead of a finder lookup. You can change the step order, turn steps off, and set per-person limits under ⚙︎ settings.
 
-**Saved contacts:** Every email found is added to **Saved contacts**. **Copy for Sheets** puts them on your clipboard to paste into a Google Sheet. **Export CSV** downloads a file. The columns (First Name, Last Name, Email, Title, Company, Job…) line up with Streak and other mail-merge tools.
+**Saved contacts:** Every email found is added to the **Saved** tab. **Copy for Sheets** puts them on your clipboard to paste into a Google Sheet. **Export CSV** downloads a file. The columns (First Name, Last Name, Email, Title, Company, Job…) line up with Streak and other mail-merge tools.
 
 Please be a good sender: keep cold emails personal and few, and stop when someone asks you to.
 
@@ -82,6 +100,7 @@ Please be a good sender: keep cold emails personal and few, and stop when someon
 - With no keys set, nothing leaves your browser.
 - **Claude mode:** when you open the popup, the posting text is sent to `api.anthropic.com`.
 - **People Data Labs:** when you click a "Find people" button, the company name and search terms are sent to `api.peopledatalabs.com`.
+- **Person tab:** when you open the popup on a LinkedIn profile, it reads the name, headline, and current company shown on that page. Nothing is sent anywhere until you click Find email.
 - **Find email:** the person's name, company or domain, and LinkedIn URL are sent to the finders you've added keys for (Hunter, People Data Labs), and candidate addresses are sent to your verifier (MillionVerifier, ZeroBounce, or Hunter). Only when you click a Find email button.
 - Saved contacts and remembered emails stay in Chrome's local extension storage on your device. Clear them from the popup and ⚙︎ settings.
 - Keys are stored in Chrome's extension storage on your device (`chrome.storage.sync`, not encrypted). Use a key with a spending limit.
@@ -96,7 +115,7 @@ Please be a good sender: keep cold emails personal and few, and stop when someon
 ## Feedback
 
 Found a bug or have an idea? [Open an issue](https://github.com/azpanda-glitch/linkedin-sourcing-helper/issues).
-To work on the code, see **How it works** below. Run the tests with `python3 test/run.py` (it runs the email waterfall checks in `test/email_test.py` too).
+To work on the code, see **How it works** below. Run the tests with `python3 test/run.py` (it also runs `test/email_test.py` and `test/profile_test.py`).
 
 ---
 
@@ -153,6 +172,7 @@ backfill the rest.
 - `lib/extract.js` — local rule-based extraction.
 - `lib/query.js` — Boolean strings + LinkedIn/Google X-ray URL builders.
 - `lib/email.js` — the email waterfall, verifier adapters, and CSV/Sheets export.
+- `lib/profile.js` — reads a contact out of a LinkedIn profile (company from the headline when the page doesn't label it).
 - `background.js` — proxies Claude, People Data Labs, and the email providers (keeps keys/CORS out of page context), and caches email results.
 - `popup/` — UI: editable Boolean box + grouped search links.
 - `options/` — settings (mode, API key, model).

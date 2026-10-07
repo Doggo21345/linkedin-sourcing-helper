@@ -1,6 +1,7 @@
 import { extractLocal } from "../lib/extract.js";
 import { buildQueries, countOperators, isEarlyCareer } from "../lib/query.js";
 import { displayName, normalizeDomain, contactsToCsv, contactsToTsv } from "../lib/email.js";
+import { companyFromHeadline, cleanProfileName, profileUrl } from "../lib/profile.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -418,42 +419,66 @@ async function storeContacts(list) {
   renderContacts(list);
 }
 
+/**
+ * Adds or updates a contact. Works with no email too: saving someone from their
+ * profile before (or instead of) looking up their address is the Apollo flow.
+ */
 async function saveContact(person, result, job) {
-  if (!result?.email) return;
   const { first, last } = displayName(person.name);
   const contact = {
     first,
     last,
-    email: result.email,
-    status: result.status,
+    email: result?.email || "",
+    status: result?.email ? result.status : "",
     title: person.title || "",
     company: person.company || "",
     linkedin: person.linkedin || "",
-    job: job.title || "",
-    jobUrl: job.url || "",
-    source: result.source || "",
+    job: job?.title || "",
+    jobUrl: job?.url || "",
+    source: result?.source || "",
     foundOn: new Date().toISOString().slice(0, 10)
   };
+  if (!contact.first && !contact.email) return null;
   const list = await loadContacts();
-  const i = list.findIndex((c) => c.email === contact.email || (contact.linkedin && c.linkedin === contact.linkedin));
-  if (i >= 0) list[i] = { ...list[i], ...contact };
-  else list.push(contact);
+  const same = (c) =>
+    (contact.linkedin && c.linkedin === contact.linkedin) || (contact.email && c.email === contact.email);
+  const i = list.findIndex(same);
+  if (i >= 0) {
+    // Never wipe what's already known: a re-save without an email keeps the old one.
+    const merged = { ...list[i] };
+    for (const [k, v] of Object.entries(contact)) if (v) merged[k] = v;
+    list[i] = merged;
+  } else {
+    list.push(contact);
+  }
   await storeContacts(list);
+  return i >= 0 ? "updated" : "added";
 }
 
 function renderContacts(list) {
   $("contact-count").textContent = String(list.length);
+  $("contacts-empty").hidden = list.length > 0;
   const ul = $("contacts");
   ul.innerHTML = "";
   list.forEach((c, i) => {
     const li = document.createElement("li");
     const who = document.createElement("span");
     who.className = "who";
-    who.textContent = `${[c.first, c.last].filter(Boolean).join(" ")}: ${c.email}`;
-    who.title = [c.title, c.company, c.job].filter(Boolean).join(" · ");
+    who.textContent = [c.first, c.last].filter(Boolean).join(" ") + (c.email ? `: ${c.email}` : "");
+    who.title = [c.title, c.company].filter(Boolean).join(" · ");
+    if (c.job) {
+      const job = document.createElement("span");
+      job.className = "job";
+      job.textContent = c.job;
+      who.appendChild(job);
+    }
+    if (c.linkedin) {
+      who.style.cursor = "pointer";
+      who.addEventListener("click", () => chrome.tabs.create({ url: c.linkedin }));
+    }
     const chip = document.createElement("span");
-    chip.className = `chip ${c.status}`;
-    chip.textContent = c.status === "valid" ? "✓" : c.status;
+    chip.className = `chip ${c.status || "unknown"}`;
+    chip.textContent = !c.email ? "no email" : c.status === "valid" ? "✓" : c.status;
     const remove = document.createElement("button");
     remove.className = "remove";
     remove.title = "Remove";
@@ -497,35 +522,161 @@ function wireContacts() {
   loadContacts().then(renderContacts);
 }
 
-function wireLookup(ext, job) {
-  $("lookup-go").addEventListener("click", async () => {
-    const out = $("lookup-result");
-    const name = $("lookup-name").value.trim();
-    if (!name) {
-      out.textContent = "Enter a name first.";
-      return;
+// ---- Person tab --------------------------------------------------------------
+
+// Self-contained, like scrapePostingInPage: it's serialized into the page. Reads
+// only the profile on screen, only when the popup is opened.
+function scrapeProfileInPage() {
+  const clean = (s) => String(s || "").replace(/\s+/g, " ").trim();
+  const pick = (selectors) => {
+    for (const sel of selectors) {
+      const el = document.querySelector(sel);
+      const text = clean(el?.innerText || el?.textContent);
+      if (text) return text;
     }
-    const domainText = $("lookup-domain").value.trim();
-    if (domainText && !normalizeDomain(domainText)) {
-      out.textContent = "That domain doesn't look right. Try something like stripe.com.";
-      return;
+    return "";
+  };
+  const isProfile = /^\/in\/[^/]+/.test(location.pathname);
+  if (!isProfile) return { isProfile: false };
+
+  let name = pick(["main h1", "h1.text-heading-xlarge", ".top-card-layout__title", "h1"]);
+  if (!name) {
+    // "(3) Jane Doe | LinkedIn" or "Jane Doe - Recruiter - Stripe | LinkedIn"
+    name = clean(document.title.replace(/^\(\d+\+?\)\s*/, "").split("|")[0].split(" - ")[0]);
+  }
+  const headline = pick([
+    "main .text-body-medium.break-words",
+    ".pv-text-details__left-panel .text-body-medium",
+    ".top-card-layout__headline"
+  ]);
+
+  // Current company: LinkedIn labels the top-card button "Current company: X".
+  let company = "";
+  for (const el of document.querySelectorAll('[aria-label^="Current company"]')) {
+    company = clean((el.getAttribute("aria-label") || "").replace(/^Current company:?\s*/i, "").split(/\.\s|\. Click/)[0]);
+    if (company) break;
+  }
+  if (!company) {
+    company = pick([
+      ".top-card-layout__first-subline .top-card-link--link",
+      '[data-section="currentPositionsDetails"] .top-card-link__description'
+    ]);
+  }
+  return { isProfile: true, name, headline, company, pathname: location.pathname };
+}
+
+async function readProfile(tab) {
+  try {
+    const [inj] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: scrapeProfileInPage });
+    return inj?.result || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function personStatus(text, isError = false) {
+  const el = $("person-status");
+  el.textContent = text || "";
+  el.classList.toggle("error", isError);
+  el.hidden = !text;
+}
+
+// The last posting viewed in the Job tab, so a profile opened from its searches
+// is saved against that job. Ignored once it's a few days old.
+const LAST_JOB_MAX_AGE_MS = 3 * 864e5;
+
+async function rememberJob(job) {
+  if (job?.title) await chrome.storage.local.set({ lastJob: { ...job, at: Date.now() } });
+}
+
+async function recentJob() {
+  const { lastJob } = await chrome.storage.local.get(["lastJob"]);
+  return lastJob && Date.now() - (lastJob.at || 0) < LAST_JOB_MAX_AGE_MS ? lastJob : null;
+}
+
+async function wirePerson(tab) {
+  let job = await recentJob();
+  const showJob = () => {
+    $("person-job").hidden = !job;
+    if (job) $("person-job-title").textContent = [job.title, job.company].filter(Boolean).join(" · ");
+  };
+  showJob();
+  $("person-job-unlink").addEventListener("click", () => {
+    job = null;
+    showJob();
+  });
+
+  const profile = /linkedin\.com\/in\//.test(tab?.url || "") ? await readProfile(tab) : null;
+  if (profile?.isProfile) {
+    $("person-name").value = cleanProfileName(profile.name);
+    $("person-title").value = profile.headline || "";
+    $("person-company").value = profile.company || companyFromHeadline(profile.headline) || "";
+    $("person-linkedin").value = profileUrl(profile.pathname);
+    const missing = [!profile.name && "name", !$("person-company").value && "company"].filter(Boolean);
+    personStatus(missing.length ? `Couldn't read the ${missing.join(" or ")} from this profile. Type it above.` : "");
+  } else {
+    personStatus("Open someone's LinkedIn profile to fill this in, or type a name and company.");
+  }
+
+  // Remembered companies fill in the domain, so the second person at a company
+  // skips straight to their known email format.
+  const fillDomain = async () => {
+    const company = $("person-company").value.trim();
+    if (!company || $("person-domain").value.trim()) return;
+    const res = await sendToBg({ type: "KNOWN_DOMAIN", company });
+    if (res?.domain) $("person-domain").value = res.domain;
+  };
+  $("person-company").addEventListener("change", fillDomain);
+  await fillDomain();
+
+  const readForm = () => ({
+    name: $("person-name").value.trim(),
+    title: $("person-title").value.trim(),
+    company: $("person-company").value.trim(),
+    domain: $("person-domain").value.trim(),
+    linkedin: $("person-linkedin").value.trim()
+  });
+
+  $("person-save").addEventListener("click", async () => {
+    const person = readForm();
+    if (!person.name) return personStatus("Enter a name first.", true);
+    const did = await saveContact(person, null, job);
+    personStatus(did === "updated" ? "Updated in Saved." : "Saved.");
+  });
+
+  $("person-find").addEventListener("click", async () => {
+    const person = readForm();
+    const out = $("person-result");
+    if (!person.name) return personStatus("Enter a name first.", true);
+    if (person.domain && !normalizeDomain(person.domain)) {
+      return personStatus("That domain doesn't look right. Try something like stripe.com.", true);
     }
-    const person = {
-      name,
-      company: $("company").value.trim() || ext.company,
-      domain: domainText,
-      linkedin: $("lookup-linkedin").value.trim()
-    };
-    $("lookup-go").disabled = true;
+    personStatus("");
+    $("person-find").disabled = true;
     out.textContent = "Searching…";
     const res = await lookupEmail(person);
-    $("lookup-go").disabled = false;
+    $("person-find").disabled = false;
     renderEmailResult(out, res);
     if (res?.ok) {
-      if (!domainText && res.result.domain) $("lookup-domain").value = res.result.domain;
+      if (!person.domain && res.result.domain) $("person-domain").value = res.result.domain;
       await saveContact(person, res.result, job);
     }
   });
+}
+
+// ---- Tabs ------------------------------------------------------------------------
+
+function showTab(name) {
+  for (const btn of document.querySelectorAll(".tab")) {
+    btn.setAttribute("aria-selected", String(btn.dataset.tab === name));
+  }
+  for (const id of ["job", "person", "saved"]) $(`panel-${id}`).hidden = id !== name;
+}
+
+function wireTabs() {
+  for (const btn of document.querySelectorAll(".tab")) {
+    btn.addEventListener("click", () => showTab(btn.dataset.tab));
+  }
 }
 
 function renderPeople(people, ext, job) {
@@ -636,18 +787,7 @@ function wirePdl(ext, job) {
   $("find-peers").addEventListener("click", () => run("peers", "people in this role"));
 }
 
-async function main() {
-  $("settings-link").addEventListener("click", (e) => {
-    e.preventDefault();
-    chrome.runtime.openOptionsPage();
-  });
-
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab || !/^https:\/\/([\w-]+\.)?linkedin\.com\//.test(tab.url || "")) {
-    setStatus("Open a LinkedIn job posting, then click the extension.", true);
-    return;
-  }
-
+async function initJobTab(tab) {
   setStatus("Reading posting…");
 
   // Primary: inject the scrape on demand (works regardless of when the
@@ -714,10 +854,9 @@ async function main() {
   $("posting").hidden = false;
   renderFromExt(ext);
 
-  const job = { title: posting.title || "", url: posting.url || tab.url || "" };
+  const job = { title: posting.title || "", url: posting.url || tab.url || "", company: ext.company || posting.company || "" };
+  await rememberJob(job);
   wirePdl(ext, job);
-  wireLookup(ext, job);
-  wireContacts();
 
   $("company").value = ext.company || "";
   $("role").value = ext.roleName || "";
@@ -737,6 +876,34 @@ async function main() {
     $("copy-bool").textContent = "Copied";
     setTimeout(() => ($("copy-bool").textContent = "Copy"), 1200);
   });
+}
+
+async function main() {
+  $("settings-link").addEventListener("click", (e) => {
+    e.preventDefault();
+    chrome.runtime.openOptionsPage();
+  });
+  wireTabs();
+  wireContacts();
+
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const url = tab?.url || "";
+  const onLinkedIn = /^https:\/\/([\w-]+\.)?linkedin\.com\//.test(url);
+  const onProfile = onLinkedIn && /linkedin\.com\/in\//.test(url);
+
+  // Open on the tab that matches the page: a profile goes straight to Person.
+  showTab(onProfile ? "person" : "job");
+  await wirePerson(tab);
+
+  if (!onLinkedIn) {
+    setStatus("Open a LinkedIn job posting to find the people behind it.", true);
+    return;
+  }
+  if (onProfile) {
+    setStatus("This is a profile. Use the Person tab, or open a job posting for this tab.");
+    return;
+  }
+  await initJobTab(tab);
 }
 
 main();

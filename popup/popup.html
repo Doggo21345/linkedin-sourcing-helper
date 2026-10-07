@@ -10,56 +10,90 @@
     <a id="settings-link" href="#" title="Settings">⚙︎</a>
   </header>
 
-  <div id="status" class="status"></div>
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" data-tab="job" id="tab-job">Job</button>
+    <button class="tab" role="tab" data-tab="person" id="tab-person">Person</button>
+    <button class="tab" role="tab" data-tab="saved" id="tab-saved">Saved <span id="contact-count" class="badge">0</span></button>
+  </nav>
 
-  <section id="posting" hidden>
-    <div class="meta">
-      <div id="job-title" class="job-title"></div>
-      <div id="job-company" class="muted"></div>
+  <!-- Job: the posting you're on, and the people behind it -->
+  <section id="panel-job" class="panel" hidden>
+    <div id="status" class="status"></div>
+
+    <div id="posting" hidden>
+      <div class="meta">
+        <div id="job-title" class="job-title"></div>
+        <div id="job-company" class="muted"></div>
+      </div>
+
+      <label class="field-label" for="role">Role <span class="badge">searched as a phrase</span></label>
+      <input id="role" type="text" spellcheck="false" placeholder="e.g. Software Engineer Intern" />
+
+      <label class="field-label" for="company">Company <span class="badge">used in all searches</span></label>
+      <input id="company" type="text" spellcheck="false" placeholder="e.g. Amazon" />
+
+      <div id="detect" class="muted"></div>
+
+      <label class="field-label" for="boolean">LinkedIn keywords <span id="src-badge" class="badge"></span></label>
+      <textarea id="boolean" rows="3" spellcheck="false"></textarea>
+      <div class="row">
+        <button id="rebuild" class="secondary">Rebuild links</button>
+        <button id="copy-bool" class="secondary">Copy</button>
+      </div>
+
+      <h2>Hiring manager posts</h2>
+      <ul id="hm-links" class="links"></ul>
+
+      <h2>Recruiters & people</h2>
+      <ul id="sourcer-links" class="links"></ul>
+      <p class="muted hint">Open someone's profile from these searches, then click the extension again: the <strong>Person</strong> tab finds their email and saves them to this job.</p>
+
+      <h2>Live people search (People Data Labs)</h2>
+      <div class="row">
+        <button id="find-recruiters" class="secondary">Find recruiters / hiring mgrs</button>
+        <button id="find-peers" class="secondary">Find people in this role</button>
+      </div>
+      <div id="pdl-status" class="muted"></div>
+      <button id="find-all-emails" class="secondary" hidden>Find all emails</button>
+      <ul id="pdl-results" class="results"></ul>
+    </div>
+  </section>
+
+  <!-- Person: the profile you're on (or anyone you type in) -->
+  <section id="panel-person" class="panel" hidden>
+    <div id="person-status" class="status"></div>
+
+    <label class="field-label" for="person-name">Name</label>
+    <input id="person-name" type="text" spellcheck="false" placeholder="e.g. Jane Doe" />
+
+    <label class="field-label" for="person-title">Title / headline</label>
+    <input id="person-title" type="text" spellcheck="false" placeholder="e.g. University Recruiter at Stripe" />
+
+    <label class="field-label" for="person-company">Company</label>
+    <input id="person-company" type="text" spellcheck="false" placeholder="e.g. Stripe" />
+
+    <label class="field-label" for="person-domain">Company email domain <span class="badge">optional</span></label>
+    <input id="person-domain" type="text" spellcheck="false" placeholder="e.g. stripe.com" />
+
+    <label class="field-label" for="person-linkedin">LinkedIn URL</label>
+    <input id="person-linkedin" type="text" spellcheck="false" placeholder="linkedin.com/in/…" />
+
+    <div id="person-job" class="linked-job" hidden>
+      <span class="muted">For job:</span> <span id="person-job-title"></span>
+      <button id="person-job-unlink" class="remove" title="Don't link this person to a job">×</button>
     </div>
 
-    <label class="field-label" for="role">Role <span class="badge">searched as a phrase</span></label>
-    <input id="role" type="text" spellcheck="false" placeholder="e.g. Software Engineer Intern" />
-
-    <label class="field-label" for="company">Company <span class="badge">used in all searches</span></label>
-    <input id="company" type="text" spellcheck="false" placeholder="e.g. Amazon" />
-
-    <div id="detect" class="muted"></div>
-
-    <label class="field-label" for="boolean">LinkedIn keywords <span id="src-badge" class="badge"></span></label>
-    <textarea id="boolean" rows="3" spellcheck="false"></textarea>
     <div class="row">
-      <button id="rebuild" class="secondary">Rebuild links</button>
-      <button id="copy-bool" class="secondary">Copy</button>
+      <button id="person-find">Find email</button>
+      <button id="person-save" class="secondary">Save</button>
     </div>
+    <div id="person-result"></div>
+  </section>
 
-    <h2>Hiring manager posts</h2>
-    <ul id="hm-links" class="links"></ul>
-
-    <h2>Recruiters & people</h2>
-    <ul id="sourcer-links" class="links"></ul>
-
-    <h2>Live people search (People Data Labs)</h2>
-    <div class="row">
-      <button id="find-recruiters" class="secondary">Find recruiters / hiring mgrs</button>
-      <button id="find-peers" class="secondary">Find people in this role</button>
-    </div>
-    <div id="pdl-status" class="muted"></div>
-    <button id="find-all-emails" class="secondary" hidden>Find all emails</button>
-    <ul id="pdl-results" class="results"></ul>
-
-    <h2>Find an email</h2>
-    <label class="field-label" for="lookup-name">Name</label>
-    <input id="lookup-name" type="text" spellcheck="false" placeholder="e.g. Jane Doe" />
-    <label class="field-label" for="lookup-domain">Company email domain <span class="badge">optional</span></label>
-    <input id="lookup-domain" type="text" spellcheck="false" placeholder="e.g. stripe.com" />
-    <label class="field-label" for="lookup-linkedin">LinkedIn URL <span class="badge">optional</span></label>
-    <input id="lookup-linkedin" type="text" spellcheck="false" placeholder="linkedin.com/in/…" />
-    <div class="row"><button id="lookup-go">Find email</button></div>
-    <div id="lookup-result"></div>
-
-    <h2>Saved contacts <span id="contact-count" class="badge">0</span></h2>
+  <!-- Saved: everyone you've saved, from either tab -->
+  <section id="panel-saved" class="panel" hidden>
     <ul id="contacts" class="contacts"></ul>
+    <p id="contacts-empty" class="muted">Nobody saved yet. Use <strong>Save</strong> or <strong>Find email</strong> on the Job or Person tab.</p>
     <div class="row">
       <button id="copy-sheets" class="secondary">Copy for Sheets</button>
       <button id="export-csv" class="secondary">Export CSV</button>

@@ -2,7 +2,7 @@
 // email waterfall so API keys and CORS handling stay out of page context.
 // Claude falls back to null on any failure (popup then uses local extraction).
 
-import { findEmail, DEFAULT_STEPS } from "./lib/email.js";
+import { findEmail, DEFAULT_STEPS, normalizeDomain } from "./lib/email.js";
 
 const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
 
@@ -168,6 +168,16 @@ async function http(url, opts = {}) {
   }
 }
 
+// "Stripe, Inc." and "stripe" are one company for the domain lookup.
+function companyKey(company) {
+  return String(company || "").toLowerCase().replace(/\b(inc|llc|ltd|corp|corporation|co)\b\.?/g, "").replace(/[^a-z0-9]/g, "");
+}
+
+async function knownDomain(company) {
+  const { companyDomains } = await chrome.storage.local.get(["companyDomains"]);
+  return (companyDomains || {})[companyKey(company)] || "";
+}
+
 function cacheKey(person) {
   return (person.linkedin || `${person.name}@${person.domain || person.company}`).toLowerCase().trim();
 }
@@ -177,9 +187,15 @@ async function emailLookup(person, force) {
     "hunterApiKey", "pdlApiKey", "zerobounceApiKey", "millionverifierApiKey",
     "emailVerifier", "emailSteps", "maxVerifications", "maxGuesses"
   ]);
-  const local = await chrome.storage.local.get(["emailCache", "emailPatterns", "catchAllDomains"]);
+  const local = await chrome.storage.local.get(["emailCache", "emailPatterns", "catchAllDomains", "companyDomains"]);
+  const companyDomains = local.companyDomains || {};
   const cache = local.emailCache || {};
+  // Keyed on what was asked, before the domain is filled in below, so the same
+  // lookup always hits the same cache entry.
   const key = cacheKey(person);
+  // A domain learned from an earlier lookup at this company lets the waterfall
+  // start from the company's known email format instead of a finder call.
+  if (!person.domain && person.company) person = { ...person, domain: companyDomains[companyKey(person.company)] || "" };
 
   // Only confident results are cached; a miss might succeed after adding a key.
   if (!force && cache[key]) return { ok: true, result: { ...cache[key], cached: true } };
@@ -204,11 +220,20 @@ async function emailLookup(person, force) {
 
   const result = await findEmail(person, cfg, deps);
   if (result.status === "valid" || result.status === "risky") cache[key] = result;
-  await chrome.storage.local.set({ emailCache: cache, emailPatterns: deps.patterns, catchAllDomains: deps.catchAll });
+  if (person.company && result.domain && (result.status === "valid" || result.status === "risky")) {
+    companyDomains[companyKey(person.company)] = normalizeDomain(result.domain);
+  }
+  await chrome.storage.local.set({
+    emailCache: cache, emailPatterns: deps.patterns, catchAllDomains: deps.catchAll, companyDomains
+  });
   return { ok: true, result };
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type === "KNOWN_DOMAIN") {
+    knownDomain(msg.company).then((domain) => sendResponse({ domain }));
+    return true;
+  }
   if (msg?.type === "FIND_EMAIL") {
     emailLookup(msg.person, msg.force)
       .then(sendResponse)

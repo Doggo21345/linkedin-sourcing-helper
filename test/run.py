@@ -258,7 +258,10 @@ def main():
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import email_test
     email_failed = email_test.main()
-    return 1 if failures or email_failed else 0
+    print()
+    import profile_test
+    profile_failed = profile_test.main()
+    return 1 if failures or email_failed or profile_failed else 0
 
 
 if __name__ == "__main__":
