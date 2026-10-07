@@ -15,7 +15,7 @@ searches to run yourself.
 Not in the Chrome Web Store yet, so it installs as an "unpacked" extension:
 
 1. **Download:** click the green **Code** button at the top of this page, then **Download ZIP**, and unzip it.
-   (Or `git clone https://github.com/azpanda-glitch/linkedin-sourcing-helper.git`.)
+   (Or `git clone https://github.com/Doggo21345/linkedin-sourcing-helper.git`.)
 2. **Open** `chrome://extensions` in Chrome.
 3. Turn on **Developer mode** (top-right toggle).
 4. Click **Load unpacked** and select the unzipped folder, the one containing `manifest.json`.
@@ -108,13 +108,13 @@ Please be a good sender: keep cold emails personal and few, and stop when someon
 
 ## Troubleshooting
 
-- **"Role not detected":** LinkedIn changes its page layout often. Type the job title into **Role** and click **Rebuild links**, and please [open an issue](https://github.com/azpanda-glitch/linkedin-sourcing-helper/issues) with the posting URL.
+- **"Role not detected":** LinkedIn changes its page layout often. Type the job title into **Role** and click **Rebuild links**, and please [open an issue](https://github.com/Doggo21345/linkedin-sourcing-helper/issues) with the posting URL.
 - **A LinkedIn search returns zero results:** free accounts get zero results, with no error, once a query uses too many Boolean operators. Try the Google X-ray link instead (see [the operator budget](#the-boolean-operator-budget-important)).
 - **Nothing happens when you click the icon:** reload the LinkedIn tab after installing or updating the extension.
 
 ## Feedback
 
-Found a bug or have an idea? [Open an issue](https://github.com/azpanda-glitch/linkedin-sourcing-helper/issues).
+Found a bug or have an idea? [Open an issue](https://github.com/Doggo21345/linkedin-sourcing-helper/issues).
 To work on the code, see **How it works** below. Run the tests with `python3 test/run.py` (it also runs `test/email_test.py` and `test/profile_test.py`).
 
 ---
