@@ -3,6 +3,7 @@
 // Claude falls back to null on any failure (popup then uses local extraction).
 
 import { findEmail, DEFAULT_STEPS, normalizeDomain } from "./lib/email.js";
+import { BOARD_API, normalizeJobs, isInternship, parseBoardEntry, slugsFor } from "./lib/boards.js";
 
 const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
 
@@ -229,7 +230,88 @@ async function emailLookup(person, force) {
   return { ok: true, result };
 }
 
+// ---- Job boards ----------------------------------------------------------------
+
+const BOARD_CACHE_MS = 30 * 60 * 1000;
+
+async function fetchJson(url) {
+  const r = await http(url);
+  return r.status === 200 ? r.json : null;
+}
+
+/** {board, slug} for a company name, trying each board in turn. Remembered, misses included. */
+async function resolveBoard(name, resolved) {
+  const key = name.toLowerCase();
+  if (key in resolved) return resolved[key];
+  let found = null;
+  outer: for (const slug of slugsFor(name)) {
+    for (const board of ["greenhouse", "lever", "ashby"]) {
+      if (normalizeJobs(board, slug, await fetchJson(BOARD_API[board](slug)))) {
+        found = { board, slug };
+        break outer;
+      }
+    }
+  }
+  resolved[key] = found;
+  return found;
+}
+
+/**
+ * Internship postings from every board in the list. Only internships are kept
+ * in the cache: a big company's board is hundreds of jobs and storage is small.
+ */
+async function checkBoards(lines, force) {
+  const local = await chrome.storage.local.get(["boardCache", "boardResolve"]);
+  const cache = local.boardCache || {};
+  const resolved = local.boardResolve || {};
+  const unknown = [];
+  const errors = [];
+  const entries = [];
+  for (const line of lines) {
+    const e = parseBoardEntry(line);
+    if (!e) continue;
+    if (e.board) entries.push(e);
+    else {
+      const r = await resolveBoard(e.name, resolved);
+      if (r) entries.push(r);
+      else unknown.push(e.name);
+    }
+  }
+
+  const jobs = [];
+  const queue = [...entries];
+  // A few at a time: fast enough, and polite to the boards.
+  const worker = async () => {
+    while (queue.length) {
+      const { board, slug } = queue.shift();
+      const key = `${board}:${slug}`;
+      const hit = cache[key];
+      if (!force && hit && Date.now() - hit.at < BOARD_CACHE_MS) {
+        jobs.push(...hit.jobs);
+        continue;
+      }
+      const list = normalizeJobs(board, slug, await fetchJson(BOARD_API[board](slug)));
+      if (!list) {
+        errors.push(key);
+        continue;
+      }
+      const interns = list.filter((j) => isInternship(j.title));
+      cache[key] = { at: Date.now(), jobs: interns };
+      jobs.push(...interns);
+    }
+  };
+  await Promise.all(Array.from({ length: 6 }, worker));
+  await chrome.storage.local.set({ boardCache: cache, boardResolve: resolved });
+  return { ok: true, jobs, checked: entries.length, unknown, errors };
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type === "CHECK_BOARDS") {
+    checkBoards(msg.lines || [], msg.force)
+      .then(sendResponse)
+      .catch((e) => sendResponse({ ok: false, error: "exception", detail: String(e) }));
+    return true;
+  }
   if (msg?.type === "KNOWN_DOMAIN") {
     knownDomain(msg.company).then((domain) => sendResponse({ domain }));
     return true;

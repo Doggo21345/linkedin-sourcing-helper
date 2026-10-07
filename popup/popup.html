@@ -13,6 +13,7 @@
   <nav class="tabs" role="tablist">
     <button class="tab" role="tab" data-tab="job" id="tab-job">Job</button>
     <button class="tab" role="tab" data-tab="person" id="tab-person">Person</button>
+    <button class="tab" role="tab" data-tab="find" id="tab-find">Find</button>
     <button class="tab" role="tab" data-tab="saved" id="tab-saved">Saved <span id="contact-count" class="badge">0</span></button>
   </nav>
 
@@ -88,6 +89,53 @@
       <button id="person-save" class="secondary">Save</button>
     </div>
     <div id="person-result"></div>
+  </section>
+
+  <!-- Find: internships straight from the job boards -->
+  <section id="panel-find" class="panel" hidden>
+    <label class="field-label" for="find-role">Role <span class="badge">optional</span></label>
+    <input id="find-role" type="text" spellcheck="false" placeholder="e.g. software engineer" />
+    <div class="row">
+      <label class="field-label inline" for="find-term">Term
+        <select id="find-term">
+          <option value="Summer 2027">Summer 2027</option>
+          <option value="Fall 2027">Fall 2027</option>
+          <option value="Spring 2027">Spring 2027</option>
+          <option value="Winter 2027">Winter 2027</option>
+          <option value="Summer 2026">Summer 2026</option>
+          <option value="">Any</option>
+        </select>
+      </label>
+      <label class="field-label inline" for="find-recency">Posted
+        <select id="find-recency">
+          <option value="day">Past 24 hours</option>
+          <option value="week" selected>Past week</option>
+          <option value="month">Past month</option>
+          <option value="">Any time</option>
+        </select>
+      </label>
+    </div>
+
+    <h2>Search the job boards on Google</h2>
+    <p class="muted hint">Finds internships at companies you might not know to check.</p>
+    <ul id="board-links" class="links compact"></ul>
+
+    <h2>Check company boards live</h2>
+    <p class="muted hint">Reads each company's own job board for real posting dates. <strong>NEW</strong> = posted in the last 48 hours.</p>
+    <div class="row">
+      <button id="boards-check">Check now</button>
+      <button id="boards-edit" class="secondary">Edit companies</button>
+    </div>
+    <div id="boards-editor" hidden>
+      <label class="field-label" for="boards-list">One per line: a company name, a board link, or <code>greenhouse:slug</code></label>
+      <textarea id="boards-list" rows="8" spellcheck="false"></textarea>
+      <div class="row">
+        <button id="boards-save" class="secondary">Save list</button>
+        <button id="boards-reset" class="secondary">Reset to defaults</button>
+      </div>
+    </div>
+    <div id="boards-status" class="muted"></div>
+    <ul id="board-results" class="results"></ul>
   </section>
 
   <!-- Saved: everyone you've saved, from either tab -->

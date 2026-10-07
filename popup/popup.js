@@ -2,6 +2,7 @@ import { extractLocal } from "../lib/extract.js";
 import { buildQueries, countOperators, isEarlyCareer } from "../lib/query.js";
 import { displayName, normalizeDomain, contactsToCsv, contactsToTsv } from "../lib/email.js";
 import { companyFromHeadline, cleanProfileName, profileUrl } from "../lib/profile.js";
+import { buildBoardSearches, filterJobs, ago, DEFAULT_BOARDS } from "../lib/boards.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -664,13 +665,131 @@ async function wirePerson(tab) {
   });
 }
 
+// ---- Find tab --------------------------------------------------------------------
+
+const NEW_MS = 48 * 36e5;
+const RECENCY_DAYS = { day: 1, week: 7, month: 31 };
+
+async function boardLines() {
+  const { boardList } = await chrome.storage.sync.get(["boardList"]);
+  return typeof boardList === "string" && boardList.trim() ? boardList.split("\n") : DEFAULT_BOARDS;
+}
+
+function renderBoardJobs(jobs) {
+  const ul = $("board-results");
+  ul.innerHTML = "";
+  for (const j of jobs.slice(0, 150)) {
+    const li = document.createElement("li");
+    const a = document.createElement("a");
+    a.href = j.url;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.className = "name";
+    a.textContent = j.title;
+    if (j.postedAt && Date.now() - j.postedAt < NEW_MS) {
+      const badge = document.createElement("span");
+      badge.className = "new";
+      badge.textContent = "NEW";
+      a.appendChild(badge);
+    }
+    const role = document.createElement("div");
+    role.className = "role";
+    role.textContent = [j.company, j.location].filter(Boolean).join(" · ");
+    const posted = document.createElement("div");
+    posted.className = "posted";
+    posted.textContent = [j.postedAt ? `Posted ${ago(j.postedAt)}` : "", j.jobId ? `Job ID ${j.jobId}` : ""]
+      .filter(Boolean).join(" · ");
+    if (j.deadline) {
+      const closes = document.createElement("span");
+      closes.className = "closes";
+      closes.textContent = ` · Closes ${new Date(j.deadline).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+      posted.appendChild(closes);
+    }
+    li.append(a, role, posted);
+    ul.appendChild(li);
+  }
+}
+
+function wireFind() {
+  const filters = () => ({
+    role: $("find-role").value.trim(),
+    term: $("find-term").value,
+    recency: $("find-recency").value
+  });
+  const renderSearches = () => renderLinks("board-links", buildBoardSearches(filters()));
+
+  // Filters persist, so the tab opens the way you left it.
+  chrome.storage.sync.get(["findFilters"]).then(({ findFilters }) => {
+    if (findFilters) {
+      $("find-role").value = findFilters.role || "";
+      $("find-term").value = findFilters.term ?? "Summer 2027";
+      $("find-recency").value = findFilters.recency ?? "week";
+    }
+    renderSearches();
+  });
+
+  let lastJobs = null;
+  const applyFilters = () => {
+    if (!lastJobs) return;
+    const f = filters();
+    // The role box takes comma-separated keywords; any one is a match.
+    const shown = filterJobs(lastJobs, { keywords: f.role, term: f.term, sinceDays: RECENCY_DAYS[f.recency] || 0 });
+    renderBoardJobs(shown);
+    const fresh = shown.filter((j) => Date.now() - j.postedAt < NEW_MS).length;
+    $("boards-status").textContent = `${shown.length} internships match${fresh ? `, ${fresh} new` : ""} (of ${lastJobs.length} open across these companies).`;
+  };
+  for (const id of ["find-role", "find-term", "find-recency"]) {
+    $(id).addEventListener("change", () => {
+      chrome.storage.sync.set({ findFilters: filters() });
+      renderSearches();
+      applyFilters();
+    });
+  }
+
+  const check = async (force) => {
+    $("boards-check").disabled = true;
+    $("boards-status").textContent = "Checking company boards…";
+    const res = await sendToBg({ type: "CHECK_BOARDS", lines: await boardLines(), force });
+    $("boards-check").disabled = false;
+    if (!res?.ok) {
+      $("boards-status").textContent = `Couldn't check the boards: ${res?.detail || res?.error || "unknown error"}`;
+      return;
+    }
+    lastJobs = res.jobs;
+    applyFilters();
+    const notes = [];
+    if (res.unknown.length) notes.push(`Not on Greenhouse, Lever, or Ashby: ${res.unknown.join(", ")}. Try the Google searches for those.`);
+    if (res.errors.length) notes.push(`Couldn't read: ${res.errors.join(", ")}.`);
+    if (notes.length) $("boards-status").textContent += " " + notes.join(" ");
+  };
+  $("boards-check").addEventListener("click", () => check(true));
+
+  $("boards-edit").addEventListener("click", async () => {
+    const ed = $("boards-editor");
+    ed.hidden = !ed.hidden;
+    if (!ed.hidden) $("boards-list").value = (await boardLines()).join("\n");
+  });
+  $("boards-save").addEventListener("click", async () => {
+    await chrome.storage.sync.set({ boardList: $("boards-list").value });
+    $("boards-editor").hidden = true;
+    check(false);
+  });
+  $("boards-reset").addEventListener("click", async () => {
+    await chrome.storage.sync.remove("boardList");
+    $("boards-list").value = DEFAULT_BOARDS.join("\n");
+  });
+
+  // Results from the last 30 minutes come back instantly from the cache.
+  check(false);
+}
+
 // ---- Tabs ------------------------------------------------------------------------
 
 function showTab(name) {
   for (const btn of document.querySelectorAll(".tab")) {
     btn.setAttribute("aria-selected", String(btn.dataset.tab === name));
   }
-  for (const id of ["job", "person", "saved"]) $(`panel-${id}`).hidden = id !== name;
+  for (const id of ["job", "person", "find", "saved"]) $(`panel-${id}`).hidden = id !== name;
 }
 
 function wireTabs() {
@@ -891,8 +1010,10 @@ async function main() {
   const onLinkedIn = /^https:\/\/([\w-]+\.)?linkedin\.com\//.test(url);
   const onProfile = onLinkedIn && /linkedin\.com\/in\//.test(url);
 
-  // Open on the tab that matches the page: a profile goes straight to Person.
-  showTab(onProfile ? "person" : "job");
+  // Open on the tab that matches the page: a profile goes straight to Person,
+  // and anywhere off LinkedIn opens Find.
+  showTab(onProfile ? "person" : onLinkedIn ? "job" : "find");
+  wireFind();
   await wirePerson(tab);
 
   if (!onLinkedIn) {

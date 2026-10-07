@@ -26,7 +26,7 @@ moving it removes the extension.
 
 ## Use it
 
-The popup has three tabs. It opens on whichever one matches the page you're on.
+The popup has four tabs. It opens on whichever one matches the page you're on.
 
 ### Job: find the people behind a posting
 1. Open a job posting on LinkedIn (`linkedin.com/jobs/view/...`) and click the Sourcing Helper icon.
@@ -47,6 +47,24 @@ The popup has three tabs. It opens on whichever one matches the page you're on.
 
 It only reads the profile you're looking at, and only when you open the popup. It never visits
 profiles on its own.
+
+### Find: internships straight from the job boards
+Works from any page. Set a **Role** (optional), **Term**, and how recently it was **Posted**.
+
+- **Search the job boards on Google:** one-click Google searches limited to the sites companies
+  post on (Greenhouse, Lever, Ashby, Workday, Eightfold, SmartRecruiters, iCIMS, Jobvite,
+  Workable), using Google's own "past day / week / month" filter. This finds internships at
+  companies you'd never have thought to check.
+- **Check company boards live:** reads about 40 companies' public Greenhouse, Lever, and Ashby
+  boards directly and lists every open internship with its **real posting date**, the **Job ID**,
+  and the **deadline** when the company lists one. **NEW** means posted in the last 48 hours.
+  Results are cached for 30 minutes; **Check now** refreshes.
+- **Edit companies** to change the list. One per line: a company name (it finds the board), a
+  board link (`jobs.lever.co/palantir`), or `greenhouse:stripe`. Companies on Workday or their
+  own site can't be read this way; the Google searches cover those.
+
+The Role box doubles as a keyword filter for the live results; separate several with commas
+(`software, data`).
 
 ### Saved: everyone you've saved
 Click a name to open their profile. **Copy for Sheets** puts the list on your clipboard to paste
@@ -100,6 +118,7 @@ Please be a good sender: keep cold emails personal and few, and stop when someon
 - With no keys set, nothing leaves your browser.
 - **Claude mode:** when you open the popup, the posting text is sent to `api.anthropic.com`.
 - **People Data Labs:** when you click a "Find people" button, the company name and search terms are sent to `api.peopledatalabs.com`.
+- **Find tab:** checking company boards fetches their public job listings from Greenhouse, Lever, and Ashby. No personal data is sent; the Google search links just open Google.
 - **Person tab:** when you open the popup on a LinkedIn profile, it reads the name, headline, and current company shown on that page. Nothing is sent anywhere until you click Find email.
 - **Find email:** the person's name, company or domain, and LinkedIn URL are sent to the finders you've added keys for (Hunter, People Data Labs), and candidate addresses are sent to your verifier (MillionVerifier, ZeroBounce, or Hunter). Only when you click a Find email button.
 - Saved contacts and remembered emails stay in Chrome's local extension storage on your device. Clear them from the popup and ⚙︎ settings.
@@ -115,7 +134,7 @@ Please be a good sender: keep cold emails personal and few, and stop when someon
 ## Feedback
 
 Found a bug or have an idea? [Open an issue](https://github.com/Doggo21345/linkedin-sourcing-helper/issues).
-To work on the code, see **How it works** below. Run the tests with `python3 test/run.py` (it also runs `test/email_test.py` and `test/profile_test.py`).
+To work on the code, see **How it works** below. Run the tests with `python3 test/run.py` (it also runs `test/email_test.py`, `test/profile_test.py`, and `test/boards_test.py`).
 
 ---
 
@@ -172,6 +191,7 @@ backfill the rest.
 - `lib/extract.js` — local rule-based extraction.
 - `lib/query.js` — Boolean strings + LinkedIn/Google X-ray URL builders.
 - `lib/email.js` — the email waterfall, verifier adapters, and CSV/Sheets export.
+- `lib/boards.js` — job-board Google searches, and reading Greenhouse / Lever / Ashby boards.
 - `lib/profile.js` — reads a contact out of a LinkedIn profile (company from the headline when the page doesn't label it).
 - `background.js` — proxies Claude, People Data Labs, and the email providers (keeps keys/CORS out of page context), and caches email results.
 - `popup/` — UI: editable Boolean box + grouped search links.
