@@ -55,17 +55,64 @@ def main():
             problems.append("%s: got %r, want %r" % (name, got, want))
 
     # --- Google searches
-    links = js('buildBoardSearches({role: "software engineer", term: "Summer 2027", recency: "week"})')
-    check("search count", len(links), 10)
-    first = unquote_plus(links[0]["url"])
-    for part in ['site:boards.greenhouse.io', 'site:jobs.lever.co', '(intern OR internship)', '"Summer 2027"',
-                 '"software engineer"', 'tbs=qdr:w']:
-        if part not in first:
-            problems.append("all-boards search missing %r: %s" % (part, first))
-    check("all-boards word count <= 32", len(first.split("q=")[1].split("&")[0].split()) <= 32, True)
-    plain = unquote_plus(js('buildBoardSearches({})')[1]["url"])
-    check("no filters: no quoted term", '"' in plain, False)
+    def query(url):
+        return unquote_plus(url.split("q=")[1].split("&")[0])
+
+    def search(boards, **f):
+        return js("buildBoardSearch(%s, %s)" % (json.dumps(boards), json.dumps(f)))
+
+    one = search(["Lever"], role="software engineer", term="Summer 2027", recency="week")
+    check("single board -> one search", len(one), 1)
+    q = query(one[0]["url"])
+    for part in ["site:jobs.lever.co", "(intern OR internship)", '"Summer 2027"', '"software engineer"']:
+        if part not in q:
+            problems.append("lever search missing %r: %s" % (part, q))
+    check("recency param", "tbs=qdr:w" in one[0]["url"], True)
+    check("one board, no OR-group", "site:jobs.ashbyhq.com" in q, False)
+
+    two = query(search(["Greenhouse", "Ashby"])[0]["url"])
+    check("two boards in one search", ("site:boards.greenhouse.io" in two and "site:jobs.ashbyhq.com" in two
+                                       and "site:jobs.lever.co" not in two), True)
+
+    every = [b["label"] for b in js("BOARD_SITES")]
+    # 9 boards (10 sites) + intern + term + US clause fit in one search...
+    check("all boards fit in one search", len(search(every, role="machine learning engineer", term="Summer 2027", country="US")), 1)
+    # ...but a longer role pushes it past 32 words, so it splits rather than dropping sites.
+    long = search(every, role="machine learning infrastructure software engineer", term="Summer 2027", country="US")
+    check("all boards + long query splits", len(long), 2)
+    for s_ in long:
+        n = len(query(s_["url"]).split())
+        if n > 32:
+            problems.append("search over 32 words (%d): %s" % (n, s_["label"]))
+    covered = ", ".join(s_["label"] for s_ in long).split(", ")
+    check("split covers every board once", covered, every)
+    check("no boards -> no search", search([]), [])
+
+    us = query(search(["Lever"], country="US")[0]["url"])
+    check("country clause", '("United States" OR USA)' in us, True)
+    plain = search(["Lever"])[0]["url"]
+    check("no filters: no quoted term", '"' in query(plain), False)
     check("no filters: no recency", "tbs=" in plain, False)
+
+    # --- Country from a posting's location (formats seen on live boards)
+    for loc, want in [
+        ("Menlo Park, CA", ["US"]), ("Mountain View, CA, USA", ["US"]), ("Cary,North Carolina,United States", ["US"]),
+        ("Washington, D.C.", ["US"]), ("Hybrid - New York, NY", ["US"]), ("San Francisco - SF9", ["US"]),
+        ("Remote, US", ["US"]), ("Atlanta, Georgia, United States", ["US"]),
+        ("Toronto, ON, CA", ["CA"]), ("Toronto", ["CA"]), ("Montreal,Quebec,Canada", ["CA"]), ("London, ON", ["CA"]),
+        ("Dublin, CA", ["US"]), ("Dublin, IE", ["IE"]), ("Zurich, CH", ["CH"]),
+        ("GB-London", ["GB"]), ("DE-Berlin-Trion Building", ["DE"]), ("London,England,United Kingdom", ["GB"]),
+        ("Bangalore", ["IN"]), ("Amsterdam, Netherlands", ["NL"]), ("Singapore, Singapore", ["SG"]),
+        ("London, Paris, Hong Kong, Tokyo", ["FR", "GB", "HK", "JP"]),
+        ("New York, London, or Paris", ["FR", "GB", "US"]),
+        ("San Francisco, CA • New York, NY", ["US"]),
+        ("Hybrid", []), ("In-Office", []), ("", []),
+    ]:
+        got = sorted(js("[...countriesIn(%s)]" % json.dumps(loc)))
+        check("countriesIn(%r)" % loc, got, want)
+    check("fitsCountry: unknown kept", js('fitsCountry("Hybrid", "CA")'), True)
+    check("fitsCountry: other country dropped", js('fitsCountry("Menlo Park, CA", "CA")'), False)
+    check("fitsCountry: any of several", js('fitsCountry("New York, London, or Paris", "GB")'), True)
 
     # --- Board list entries
     for line, want in [
@@ -124,6 +171,11 @@ def main():
     check("past week", got, 2)
     got = js("filterJobs(ALL, {keywords: 'scientist, strategist', now: %d}).map(function(j){return j.jobId;})" % NOW)
     check("keywords match any", got, ["z1", "a1"])
+    got = js("filterJobs(ALL, {country: 'US', now: %d}).map(function(j){return j.location;})" % NOW)
+    # US postings, plus "Remote", which names no country and is kept rather than hidden.
+    check("country filter", got, ["Menlo Park, CA · New York, NY", "New York, NY", "New York, NY", "Remote"])
+    got = js("filterJobs(ALL, {country: 'GB', now: %d}).map(function(j){return j.location;})" % NOW)
+    check("country filter, nothing there but Remote", got, ["Remote"])
 
     check("ago hours", js("ago(%d, %d)" % (NOW - 3 * H, NOW)), "3h ago")
     check("ago days", js("ago(%d, %d)" % (NOW - 50 * H, NOW)), "2d ago")

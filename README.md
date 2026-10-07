@@ -49,12 +49,14 @@ It only reads the profile you're looking at, and only when you open the popup. I
 profiles on its own.
 
 ### Find: internships straight from the job boards
-Works from any page. Set a **Role** (optional), **Term**, and how recently it was **Posted**.
+Works from any page. Set a **Role** (optional), **Term**, **Country**, and how recently it was **Posted**.
 
-- **Search the job boards on Google:** one-click Google searches limited to the sites companies
-  post on (Greenhouse, Lever, Ashby, Workday, Eightfold, SmartRecruiters, iCIMS, Jobvite,
-  Workable), using Google's own "past day / week / month" filter. This finds internships at
-  companies you'd never have thought to check.
+- **Search the job boards on Google:** tick the boards you want (Greenhouse, Lever, Ashby, Workday,
+  Eightfold, SmartRecruiters, iCIMS, Jobvite, Workable), then **Search on Google**. It runs one
+  search across all of them, using Google's own "past day / week / month" filter. Google only reads
+  about 32 words of a search, so if you pick a lot of boards with a long role, it splits them across
+  two tabs instead of quietly dropping some. This finds internships at companies you'd never have
+  thought to check.
 - **Check company boards live:** reads about 40 companies' public Greenhouse, Lever, and Ashby
   boards directly and lists every open internship with its **real posting date**, the **Job ID**,
   and the **deadline** when the company lists one. **NEW** means posted in the last 48 hours.
@@ -62,6 +64,13 @@ Works from any page. Set a **Role** (optional), **Term**, and how recently it wa
 - **Edit companies** to change the list. One per line: a company name (it finds the board), a
   board link (`jobs.lever.co/palantir`), or `greenhouse:stripe`. Companies on Workday or their
   own site can't be read this way; the Google searches cover those.
+
+**Country** works differently in each half:
+- **Live results** are filtered by each posting's actual location, read from the many ways boards
+  write it: "Menlo Park, CA", "Toronto, ON, CA" (Canada, not California), "GB-London", "Bangalore".
+  A posting whose location names no country ("Remote", "Hybrid") is kept rather than hidden.
+- **Google searches** can only ask for pages that mention the country, so postings that list just a
+  city and state may not show up. Leave Country on **Any** for the widest Google search.
 
 The Role box doubles as a keyword filter for the live results; separate several with commas
 (`software, data`).

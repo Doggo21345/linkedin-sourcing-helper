@@ -106,6 +106,11 @@
           <option value="">Any</option>
         </select>
       </label>
+      <label class="field-label inline" for="find-country">Country
+        <select id="find-country"></select>
+      </label>
+    </div>
+    <div class="row">
       <label class="field-label inline" for="find-recency">Posted
         <select id="find-recency">
           <option value="day">Past 24 hours</option>
@@ -117,8 +122,14 @@
     </div>
 
     <h2>Search the job boards on Google</h2>
-    <p class="muted hint">Finds internships at companies you might not know to check.</p>
-    <ul id="board-links" class="links compact"></ul>
+    <p class="muted hint">Finds internships at companies you might not know to check. Pick one or more boards.</p>
+    <div id="board-picks" class="picks"></div>
+    <div class="row">
+      <button id="board-search">Search on Google</button>
+      <button id="board-all" class="secondary small">All</button>
+      <button id="board-none" class="secondary small">None</button>
+    </div>
+    <div id="board-search-note" class="muted hint"></div>
 
     <h2>Check company boards live</h2>
     <p class="muted hint">Reads each company's own job board for real posting dates. <strong>NEW</strong> = posted in the last 48 hours.</p>

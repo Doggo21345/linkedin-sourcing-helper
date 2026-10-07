@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Sourcing Helper — Boolean & X-ray Builder",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Reads the job posting you're viewing and builds Boolean + X-ray search links to source candidates and related posts.",
   "permissions": [
     "activeTab",

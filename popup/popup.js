@@ -2,7 +2,7 @@ import { extractLocal } from "../lib/extract.js";
 import { buildQueries, countOperators, isEarlyCareer } from "../lib/query.js";
 import { displayName, normalizeDomain, contactsToCsv, contactsToTsv } from "../lib/email.js";
 import { companyFromHeadline, cleanProfileName, profileUrl } from "../lib/profile.js";
-import { buildBoardSearches, filterJobs, ago, DEFAULT_BOARDS } from "../lib/boards.js";
+import { buildBoardSearch, filterJobs, ago, DEFAULT_BOARDS, BOARD_SITES, COUNTRIES } from "../lib/boards.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -710,22 +710,71 @@ function renderBoardJobs(jobs) {
   }
 }
 
+// The five boards that carry most internship postings, picked by default.
+const DEFAULT_PICKS = ["Greenhouse", "Lever", "Ashby", "Workday", "Eightfold"];
+
 function wireFind() {
+  // Country list: "Any" plus the countries most internships are in.
+  const countrySel = $("find-country");
+  for (const [code, name] of [["", "Any"], ...COUNTRIES]) {
+    const o = document.createElement("option");
+    o.value = code;
+    o.textContent = name;
+    countrySel.appendChild(o);
+  }
+
+  // One checkbox per board.
+  const picks = $("board-picks");
+  for (const b of BOARD_SITES) {
+    const label = document.createElement("label");
+    label.className = "pick";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.value = b.label;
+    label.append(box, document.createTextNode(b.label));
+    picks.appendChild(label);
+  }
+  const chosen = () => [...picks.querySelectorAll("input:checked")].map((i) => i.value);
+  const setChosen = (labels) => picks.querySelectorAll("input").forEach((i) => (i.checked = labels.includes(i.value)));
+
   const filters = () => ({
     role: $("find-role").value.trim(),
     term: $("find-term").value,
-    recency: $("find-recency").value
+    recency: $("find-recency").value,
+    country: countrySel.value,
+    boards: chosen()
   });
-  const renderSearches = () => renderLinks("board-links", buildBoardSearches(filters()));
+  const save = () => chrome.storage.sync.set({ findFilters: filters() });
+
+  const updateSearchNote = () => {
+    const f = filters();
+    const n = buildBoardSearch(f.boards, f).length;
+    $("board-search").disabled = !f.boards.length;
+    $("board-search").textContent = n > 1 ? `Search on Google (${n} tabs)` : "Search on Google";
+    const notes = [];
+    if (n > 1) notes.push("Google reads only about 32 words per search, so these boards are split across tabs.");
+    if (f.country) notes.push("Google matches pages that mention the country; postings that only list a city may be missed.");
+    $("board-search-note").textContent = notes.join(" ");
+  };
+  const renderSearches = updateSearchNote;
 
   // Filters persist, so the tab opens the way you left it.
   chrome.storage.sync.get(["findFilters"]).then(({ findFilters }) => {
-    if (findFilters) {
-      $("find-role").value = findFilters.role || "";
-      $("find-term").value = findFilters.term ?? "Summer 2027";
-      $("find-recency").value = findFilters.recency ?? "week";
-    }
-    renderSearches();
+    const f = findFilters || {};
+    $("find-role").value = f.role || "";
+    $("find-term").value = f.term ?? "Summer 2027";
+    $("find-recency").value = f.recency ?? "week";
+    countrySel.value = f.country || "";
+    setChosen(Array.isArray(f.boards) ? f.boards : DEFAULT_PICKS);
+    updateSearchNote();
+  });
+
+  picks.addEventListener("change", () => { save(); updateSearchNote(); });
+  $("board-all").addEventListener("click", () => { setChosen(BOARD_SITES.map((b) => b.label)); save(); updateSearchNote(); });
+  $("board-none").addEventListener("click", () => { setChosen([]); save(); updateSearchNote(); });
+  $("board-search").addEventListener("click", () => {
+    const f = filters();
+    buildBoardSearch(f.boards, f).forEach((s, i) => chrome.tabs.create({ url: s.url, active: i === 0 }));
   });
 
   let lastJobs = null;
@@ -733,14 +782,16 @@ function wireFind() {
     if (!lastJobs) return;
     const f = filters();
     // The role box takes comma-separated keywords; any one is a match.
-    const shown = filterJobs(lastJobs, { keywords: f.role, term: f.term, sinceDays: RECENCY_DAYS[f.recency] || 0 });
+    const shown = filterJobs(lastJobs, {
+      keywords: f.role, term: f.term, country: f.country, sinceDays: RECENCY_DAYS[f.recency] || 0
+    });
     renderBoardJobs(shown);
     const fresh = shown.filter((j) => Date.now() - j.postedAt < NEW_MS).length;
     $("boards-status").textContent = `${shown.length} internships match${fresh ? `, ${fresh} new` : ""} (of ${lastJobs.length} open across these companies).`;
   };
-  for (const id of ["find-role", "find-term", "find-recency"]) {
+  for (const id of ["find-role", "find-term", "find-recency", "find-country"]) {
     $(id).addEventListener("change", () => {
-      chrome.storage.sync.set({ findFilters: filters() });
+      save();
       renderSearches();
       applyFilters();
     });

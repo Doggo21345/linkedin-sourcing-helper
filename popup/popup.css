@@ -89,3 +89,7 @@ details.trace li { margin: 2px 0; }
 .new { font-size: 10px; font-weight: 700; color: #fff; background: #067647; border-radius: 6px; padding: 1px 5px; margin-left: 4px; }
 .closes { color: #b42318; }
 .tab { font-size: 12px; }
+.picks { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+.pick { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border: 1px solid var(--border); border-radius: 12px; font-size: 12px; cursor: pointer; user-select: none; }
+.pick input { margin: 0; }
+.pick:has(input:checked) { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
