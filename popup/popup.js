@@ -1,6 +1,6 @@
 import { extractLocal } from "../lib/extract.js";
 import { buildQueries, countOperators, isEarlyCareer } from "../lib/query.js";
-import { displayName, normalizeDomain, contactsToCsv, contactsToTsv } from "../lib/email.js";
+import { displayName, normalizeDomain, contactsToCsv, contactsToTsv, VERIFIER_TOOLS } from "../lib/email.js";
 import { companyFromHeadline, cleanProfileName, profileUrl } from "../lib/profile.js";
 import { buildBoardSearch, filterJobs, ago, DEFAULT_BOARDS, BOARD_SITES, COUNTRIES } from "../lib/boards.js";
 
@@ -416,12 +416,7 @@ function renderEmailResult(container, res) {
     note.textContent = `The domain (${r.domain}) came from the company name. If they email from a different one, put it in the domain box and search again.`;
     container.appendChild(note);
   }
-  if (r.status !== "valid" && !r.trace?.some((l) => /→/.test(l))) {
-    const tip = document.createElement("div");
-    tip.className = "muted hint";
-    tip.textContent = "Add a verifier key in ⚙︎ Settings to confirm which address is real.";
-    container.appendChild(tip);
-  }
+  if (r.email && r.status !== "valid") container.appendChild(guessDisclaimer(r.status));
 
   // Show the steps so "not found" says why: no key, no domain, no match.
   if (r.trace?.length) {
@@ -438,6 +433,40 @@ function renderEmailResult(container, res) {
     d.append(s, ul);
     container.appendChild(d);
   }
+}
+
+/**
+ * Shown on every address that isn't confirmed. Most unverified results are a
+ * guess at the company's usual format, and sending to a wrong guess bounces,
+ * which hurts the sender's own email reputation.
+ */
+function guessDisclaimer(status) {
+  const box = document.createElement("div");
+  box.className = "disclaimer";
+  const head = document.createElement("strong");
+  head.textContent = status === "risky"
+    ? "Can't be confirmed: this company's mail server accepts any address."
+    : "This is a guess, not a confirmed address.";
+  const body = document.createElement("div");
+  body.textContent = status === "risky"
+    ? "It's the most common format and often right, but it may bounce. "
+    : "It's built from the most common email formats, so it may be wrong. ";
+  body.appendChild(document.createTextNode("Check it before you send with a free verifier:"));
+  const tools = document.createElement("div");
+  tools.className = "tools";
+  for (const [name, url] of VERIFIER_TOOLS) {
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.textContent = name;
+    tools.appendChild(a);
+  }
+  const tip = document.createElement("div");
+  tip.className = "muted";
+  tip.textContent = "Or add a verifier key in ⚙︎ Settings to check automatically.";
+  box.append(head, body, tools, tip);
+  return box;
 }
 
 // ---- Saved contacts ------------------------------------------------------------
@@ -491,6 +520,11 @@ async function saveContact(person, result, job) {
 function renderContacts(list) {
   $("contact-count").textContent = String(list.length);
   $("contacts-empty").hidden = list.length > 0;
+  const guesses = list.filter((c) => c.email && c.status !== "valid").length;
+  $("contacts-guess-note").hidden = !guesses;
+  $("contacts-guess-note").textContent = guesses
+    ? `${guesses} of these ${guesses === 1 ? "is a guess" : "are guesses"} (not ✓). Verify before sending; the export marks them "unverified guess".`
+    : "";
   const ul = $("contacts");
   ul.innerHTML = "";
   list.forEach((c, i) => {

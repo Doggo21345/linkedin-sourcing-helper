@@ -78,7 +78,8 @@ The Role box doubles as a keyword filter for the live results; separate several 
 ### Saved: everyone you've saved
 Click a name to open their profile. **Copy for Sheets** puts the list on your clipboard to paste
 into a Google Sheet; **Export CSV** downloads it. The columns (First Name, Last Name, Email,
-Title, Company, Job, ...) line up with Streak and other mail-merge tools.
+Title, Company, Job, ...) line up with Streak and other mail-merge tools. The Email Status column
+spells out "verified", "unverified guess", or "risky", so filter to verified before a mail merge.
 
 ## Optional: better results with API keys
 
@@ -121,6 +122,21 @@ the likely address (`jane.doe@stripe.com`) plus the next most common formats to 
 unverified. A website domain occasionally differs from the email domain (Goldman Sachs is
 goldmansachs.com but emails from gs.com); Hunter knows the difference, so when the domain came from
 the company name, Hunter is asked by company instead.
+
+> **Most addresses without a ✓ are guesses.** Without a verifier key, the finder builds the
+> likely address from the company's usual email formats, and a guess can be wrong. Sending to a
+> wrong address bounces, and enough bounces hurt your own email's reputation. **Check any
+> unverified address before you send.** The popup shows this warning on every unverified
+> result, with links to free checkers:
+> [Hunter Email Verifier](https://hunter.io/email-verifier),
+> [ZeroBounce](https://www.zerobounce.net/email-validator),
+> [NeverBounce](https://neverbounce.com),
+> [MillionVerifier](https://www.millionverifier.com),
+> [Kickbox](https://kickbox.com),
+> [Emailable](https://emailable.com),
+> [Clearout](https://clearout.io/email-verifier),
+> [Bouncer](https://www.usebouncer.com).
+> Or add a verifier key in Settings and it checks automatically.
 
 Every result is labeled:
 

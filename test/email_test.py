@@ -295,7 +295,10 @@ def t_csv(ctx):
     header, row = csv.split("\r\n")
     assert header.startswith("First Name,Last Name,Email,Email Status"), header
     # Formula neutralized, then CSV-quoted because it contains quotes.
-    assert row.startswith('"\'=HYPERLINK(""x"")","Doe, Jr",j@acme.com,valid'), row
+    assert row.startswith('"\'=HYPERLINK(""x"")","Doe, Jr",j@acme.com,verified'), row
+    # Statuses are spelled out in the export, where there's no chip to explain them.
+    rows = call(ctx, 'contactsToCsv([{first:"A", email:"a@x.com", status:"unknown"}, {first:"B", email:"b@x.com", status:"risky"}, {first:"C", email:"", status:""}])').split("\r\n")[1:]
+    assert [r.split(",")[3] for r in rows] == ["unverified guess", '"risky (catch-all', "no email"], rows
 
 
 CASES = [

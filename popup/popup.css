@@ -95,3 +95,8 @@ details.trace li { margin: 2px 0; }
 .pick:has(input:checked) { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
 .alternatives { margin-top: 6px; }
 .alternatives .email-row { margin-top: 2px; }
+.disclaimer { margin-top: 8px; padding: 8px; border: 1px solid #fedf89; background: #fffaeb; border-radius: 6px; font-size: 12px; color: #93370d; }
+.disclaimer.small { margin: 0 0 6px; }
+.disclaimer strong { display: block; margin-bottom: 2px; }
+.disclaimer .tools { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 4px 0; }
+.disclaimer .tools a { color: var(--accent); text-decoration: none; }
