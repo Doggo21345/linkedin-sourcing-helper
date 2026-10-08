@@ -182,8 +182,54 @@ def t_dead_verifier_stops_spending(ctx):
     assert count(out["CALLS"], "millionverifier") == 1, out["CALLS"]
 
 
-def t_no_domain_explains(ctx):
-    out = waterfall(ctx, {"name": "Jane Doe", "company": "Acme"}, ZB, [])
+CLEARBIT_STRIPE = ok(200, [
+    {"name": "StripersOnline", "domain": "stripersonline.com"},
+    {"name": "Stripe", "domain": "stripe.com"},
+    {"name": "Stars and Stripes", "domain": "stripes.com"},
+])
+
+
+def t_no_domain_looks_it_up(ctx):
+    # No domain and no keys used to return nothing. Now the domain comes from the
+    # company name, so the common formats are always offered.
+    out = waterfall(ctx, {"name": "Jane Doe", "company": "Stripe"}, {"keys": {}},
+                    [["autocomplete.clearbit.com", CLEARBIT_STRIPE]])
+    r = out["r"]
+    assert (r["email"], r["status"]) == ("jane.doe@stripe.com", "unknown"), r   # exact name, not the lookalike
+    assert r["alternatives"] == ["jdoe@stripe.com", "jane@stripe.com", "janedoe@stripe.com"], r["alternatives"]
+    assert r["domainGuessed"] is True, r
+
+
+def t_lookup_down_guesses_dotcom(ctx):
+    out = waterfall(ctx, {"name": "Jane Doe", "company": "Acme Robotics, Inc."}, {"keys": {}},
+                    [["autocomplete.clearbit.com", ok(503, None)]])
+    r = out["r"]
+    assert r["email"] == "jane.doe@acmerobotics.com", r
+    assert any("guessed acmerobotics.com" in line for line in r["trace"]), r["trace"]
+
+
+def t_looked_up_domain_still_verified(ctx):
+    out = waterfall(ctx, {"name": "Jane Doe", "company": "Stripe"}, ZB,
+                    [["autocomplete.clearbit.com", CLEARBIT_STRIPE],
+                     ["zerobounce.*jdoe%40stripe.com", ZB_VALID], ["zerobounce", ZB_INVALID]])
+    r = out["r"]
+    assert (r["email"], r["status"]) == ("jdoe@stripe.com", "valid"), r
+    assert r["alternatives"] == [] and r["domainGuessed"] is False, r
+
+
+def t_hunter_gets_company_when_domain_was_looked_up(ctx):
+    # A website domain can differ from the email domain (goldmansachs.com vs gs.com),
+    # so Hunter is asked by company, and its answer wins.
+    out = waterfall(ctx, {"name": "Jane Doe", "company": "Goldman Sachs"}, {"keys": {"hunter": "h", "zerobounce": "zb"}},
+                    [["autocomplete.clearbit.com", ok(200, [{"name": "Goldman Sachs", "domain": "goldmansachs.com"}])],
+                     ["hunter.io/v2/email-finder\\?company=Goldman", ok(200, {"data": {"email": "jane.doe@gs.com", "domain": "gs.com"}})],
+                     ["zerobounce.*jane.doe%40gs.com", ZB_VALID]])
+    assert (out["r"]["email"], out["r"]["status"]) == ("jane.doe@gs.com", "valid"), out["r"]
+    assert count(out["CALLS"], "domain=goldmansachs") == 0, out["CALLS"]
+
+
+def t_no_company_no_domain_explains(ctx):
+    out = waterfall(ctx, {"name": "Jane Doe"}, ZB, [])
     r = out["r"]
     assert r["status"] == "not_found", r
     assert any("no company domain" in line for line in r["trace"]), r["trace"]
@@ -262,7 +308,11 @@ CASES = [
     ("Known catch-all costs no credits", t_known_catch_all_costs_nothing),
     ("Rejected finder key falls through to guessing", t_bad_finder_key_falls_through),
     ("Out-of-credit verifier stops spending", t_dead_verifier_stops_spending),
-    ("No domain explains why", t_no_domain_explains),
+    ("No domain: looks it up from the company name", t_no_domain_looks_it_up),
+    ("Lookup down: guesses <company>.com", t_lookup_down_guesses_dotcom),
+    ("Looked-up domain is still verified", t_looked_up_domain_still_verified),
+    ("Hunter is asked by company when the domain was looked up", t_hunter_gets_company_when_domain_was_looked_up),
+    ("No company and no domain explains why", t_no_company_no_domain_explains),
     ("Hunter's own 'valid' is trusted", t_trusts_hunter_valid),
     ("Email on the PDL record is tried first", t_pdl_record_first),
     ("PDL enrich by LinkedIn URL", t_pdl_enrich),

@@ -91,6 +91,18 @@ Everything above works with no setup. Two optional keys, added under the ⚙︎ 
 | [Hunter](https://hunter.io) | Email finder (and can double as the verifier) | Free tier available |
 | [MillionVerifier](https://www.millionverifier.com) or [ZeroBounce](https://www.zerobounce.net) | Checks that an address really exists before you send to it | Free credits on signup; pay as you go after |
 
+## Adding API keys
+1. Click the **⚙︎** in the popup to open Settings.
+2. Sign up with a provider and copy its API key:
+   - **Hunter** (finds emails, can also verify): [hunter.io/api-keys](https://hunter.io/api-keys)
+   - **MillionVerifier** (verifies): [app.millionverifier.com/api](https://app.millionverifier.com/api)
+   - **ZeroBounce** (verifies): zerobounce.net → API
+3. Paste it into the matching box under **Email finder (waterfall)**, then click **Check keys**.
+   It saves, then confirms each key works and shows how many credits are left, without using any.
+
+Start with one verifier (MillionVerifier or ZeroBounce). That's what turns a guessed address into
+a confirmed one. Hunter adds a real finder on top.
+
 ## Find emails (waterfall)
 
 **Find email** is on every People Data Labs result in the Job tab (plus **Find all emails** for the whole list), and on the **Person** tab for whoever's profile you have open. The company's email domain (like `stripe.com`) is optional; once one lookup at a company succeeds, it's remembered for the next person there.
@@ -102,6 +114,13 @@ It tries sources in order and stops at the first address a verifier confirms:
 3. Hunter's email finder
 4. People Data Labs enrich
 5. Guessing the most common formats and verifying each one
+
+If you didn't give a domain, it's looked up from the company name first (Stripe -> stripe.com,
+Datadog -> datadoghq.com), falling back to `<company>.com`. So even with **no keys at all**, you get
+the likely address (`jane.doe@stripe.com`) plus the next most common formats to try, marked
+unverified. A website domain occasionally differs from the email domain (Goldman Sachs is
+goldmansachs.com but emails from gs.com); Hunter knows the difference, so when the domain came from
+the company name, Hunter is asked by company instead.
 
 Every result is labeled:
 
@@ -129,6 +148,7 @@ Please be a good sender: keep cold emails personal and few, and stop when someon
 - **People Data Labs:** when you click a "Find people" button, the company name and search terms are sent to `api.peopledatalabs.com`.
 - **Find tab:** checking company boards fetches their public job listings from Greenhouse, Lever, and Ashby. No personal data is sent; the Google search links just open Google.
 - **Person tab:** when you open the popup on a LinkedIn profile, it reads the name, headline, and current company shown on that page. Nothing is sent anywhere until you click Find email.
+- **Domain lookup:** when no domain is known, the company name is sent to Clearbit's free company lookup (`autocomplete.clearbit.com`).
 - **Find email:** the person's name, company or domain, and LinkedIn URL are sent to the finders you've added keys for (Hunter, People Data Labs), and candidate addresses are sent to your verifier (MillionVerifier, ZeroBounce, or Hunter). Only when you click a Find email button.
 - Saved contacts and remembered emails stay in Chrome's local extension storage on your device. Clear them from the popup and ⚙︎ settings.
 - Keys are stored in Chrome's extension storage on your device (`chrome.storage.sync`, not encrypted). Use a key with a spending limit.

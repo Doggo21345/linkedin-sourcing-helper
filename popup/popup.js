@@ -391,6 +391,38 @@ function renderEmailResult(container, res) {
   row.appendChild(chip);
   container.appendChild(row);
 
+  // Nothing could be confirmed: offer the next most likely formats too.
+  if (r.alternatives?.length) {
+    const alt = document.createElement("div");
+    alt.className = "alternatives";
+    const label = document.createElement("div");
+    label.className = "muted";
+    label.textContent = "Other common formats:";
+    alt.appendChild(label);
+    for (const e of r.alternatives) {
+      const line = document.createElement("div");
+      line.className = "email-row";
+      const s = document.createElement("span");
+      s.className = "email";
+      s.textContent = e;
+      line.append(s, copyButton(e));
+      alt.appendChild(line);
+    }
+    container.appendChild(alt);
+  }
+  if (r.domainGuessed) {
+    const note = document.createElement("div");
+    note.className = "muted hint";
+    note.textContent = `The domain (${r.domain}) came from the company name. If they email from a different one, put it in the domain box and search again.`;
+    container.appendChild(note);
+  }
+  if (r.status !== "valid" && !r.trace?.some((l) => /→/.test(l))) {
+    const tip = document.createElement("div");
+    tip.className = "muted hint";
+    tip.textContent = "Add a verifier key in ⚙︎ Settings to confirm which address is real.";
+    container.appendChild(tip);
+  }
+
   // Show the steps so "not found" says why: no key, no domain, no match.
   if (r.trace?.length) {
     const d = document.createElement("details");

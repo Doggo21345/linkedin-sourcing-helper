@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Sourcing Helper — Boolean & X-ray Builder",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Reads the job posting you're viewing and builds Boolean + X-ray search links to source candidates and related posts.",
   "permissions": [
     "activeTab",
@@ -17,7 +17,8 @@
     "https://api.millionverifier.com/*",
     "https://boards-api.greenhouse.io/*",
     "https://api.lever.co/*",
-    "https://api.ashbyhq.com/*"
+    "https://api.ashbyhq.com/*",
+    "https://autocomplete.clearbit.com/*"
   ],
   "action": {
     "default_title": "Sourcing Helper",

@@ -66,7 +66,49 @@ async function save() {
   setTimeout(() => (saved.textContent = ""), 1500);
 }
 
+// Each provider's free "account" call: confirms the key works without spending a credit.
+const KEY_CHECKS = [
+  ["Hunter", "hunterKey", (k) => `https://api.hunter.io/v2/account?api_key=${encodeURIComponent(k)}`,
+    (j) => j?.data ? `works (${j.data.requests?.searches?.available ?? "?"} searches left this month)` : ""],
+  ["MillionVerifier", "mvKey", (k) => `https://api.millionverifier.com/api/v3/credits?api=${encodeURIComponent(k)}`,
+    (j) => (j && !j.error && j.credits !== undefined ? `works (${j.credits} credits)` : "")],
+  ["ZeroBounce", "zbKey", (k) => `https://api.zerobounce.net/v2/getcredits?api_key=${encodeURIComponent(k)}`,
+    (j) => (j && Number(j.Credits) >= 0 ? `works (${j.Credits} credits)` : "")],
+  ["People Data Labs", "pdlKey", null, null]
+];
+
+async function checkKeys() {
+  const ul = $("key-results");
+  ul.innerHTML = "";
+  for (const [name, id, url, read] of KEY_CHECKS) {
+    const key = $(id).value.trim();
+    const li = document.createElement("li");
+    if (!key) {
+      li.textContent = `${name}: no key`;
+    } else if (!url) {
+      li.textContent = `${name}: key saved (checked when you search)`;
+    } else {
+      li.textContent = `${name}: checking…`;
+      ul.appendChild(li);
+      try {
+        const r = await fetch(url(key));
+        const j = await r.json().catch(() => null);
+        const ok = r.ok && read(j);
+        li.textContent = `${name}: ${ok || `didn't work (HTTP ${r.status}) — check the key was copied in full`}`;
+      } catch (e) {
+        li.textContent = `${name}: couldn't reach the service`;
+      }
+      continue;
+    }
+    ul.appendChild(li);
+  }
+}
+
 $("save").addEventListener("click", save);
+$("check-keys").addEventListener("click", async () => {
+  await save();
+  await checkKeys();
+});
 $("clear-cache").addEventListener("click", async () => {
   await chrome.storage.local.remove(["emailCache", "emailPatterns", "catchAllDomains"]);
   $("clear-cache").textContent = "Cleared ✓";

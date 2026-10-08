@@ -93,3 +93,5 @@ details.trace li { margin: 2px 0; }
 .pick { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border: 1px solid var(--border); border-radius: 12px; font-size: 12px; cursor: pointer; user-select: none; }
 .pick input { margin: 0; }
 .pick:has(input:checked) { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
+.alternatives { margin-top: 6px; }
+.alternatives .email-row { margin-top: 2px; }
