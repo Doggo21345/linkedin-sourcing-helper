@@ -1,0 +1,12 @@
+{
+  "fps": 30,
+  "scenes": [
+    { "id": "hook", "frames": 90 },
+    { "id": "browser", "frames": 60 },
+    { "id": "recruiter", "frames": 90 },
+    { "id": "write", "frames": 90 },
+    { "id": "follow", "frames": 75 },
+    { "id": "find", "frames": 75 },
+    { "id": "end", "frames": 120 }
+  ]
+}

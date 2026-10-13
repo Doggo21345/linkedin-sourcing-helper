@@ -1,12 +1,12 @@
 {
-  "fps": 30,
+  "fps": 60,
+  "transition": 18,
   "scenes": [
-    { "id": "hook", "frames": 90 },
-    { "id": "browser", "frames": 60 },
-    { "id": "recruiter", "frames": 90 },
-    { "id": "write", "frames": 90 },
-    { "id": "follow", "frames": 75 },
-    { "id": "find", "frames": 75 },
-    { "id": "end", "frames": 120 }
+    { "id": "hook", "frames": 150 },
+    { "id": "product", "frames": 300 },
+    { "id": "write", "frames": 230 },
+    { "id": "follow", "frames": 200 },
+    { "id": "find", "frames": 200 },
+    { "id": "end", "frames": 240 }
   ]
 }

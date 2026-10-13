@@ -148,8 +148,9 @@ function hexA(hex: string, a: number) {
 
 // ---- Hand cursor: glides between points, presses on clicks --------------------------
 
-export const Hand: React.FC<{ path: Array<[number, number, number]>; clicks?: number[] }> = ({ path, clicks = [] }) => {
-  // path: [frame, x, y] waypoints in stage pixels.
+export const Hand: React.FC<{ path: Array<[number, number, number]>; clicks?: number[]; z?: number }> = ({ path, clicks = [], z = 260 }) => {
+  // path: [frame, x, y] waypoints in stage pixels. z: keep it just above what it clicks,
+  // or perspective shifts it off its target.
   const frame = useCurrentFrame();
   const at = path.map((p) => p[0]);
   const x = kf(frame, at, path.map((p) => p[1]));
@@ -158,7 +159,7 @@ export const Hand: React.FC<{ path: Array<[number, number, number]>; clicks?: nu
   const ring = Math.max(0, ...clicks.map((c) => (frame >= c && frame < c + 14 ? (frame - c) / 14 : 0)));
   const visible = kf(frame, [at[0], at[0] + 5], [0, 1]);
   return (
-    <div style={{ position: "absolute", left: x, top: y, transform: `translateZ(260px) scale(${1 - press * 0.14})`, opacity: visible, pointerEvents: "none" }}>
+    <div style={{ position: "absolute", left: x, top: y, transform: `translateZ(${z}px) scale(${1 - press * 0.14})`, opacity: visible, pointerEvents: "none" }}>
       {ring > 0 ? (
         <div style={{
           position: "absolute", left: 8 - 40 * ring, top: 2 - 40 * ring, width: 80 * ring, height: 80 * ring, borderRadius: "50%",

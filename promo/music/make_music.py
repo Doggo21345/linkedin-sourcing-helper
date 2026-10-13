@@ -19,18 +19,22 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 TL = json.load(open(os.path.join(HERE, "..", "src", "timeline.json")))
 FPS = TL["fps"]
+# Shots overlap by `transition` frames while they crossfade; a cut lands in the
+# middle of each crossfade.
+OVERLAP = TL.get("transition", 0)
 STARTS = {}
 _f = 0
-for _s in TL["scenes"]:
-    STARTS[_s["id"]] = _f / FPS
-    _f += _s["frames"]
+for _i, _s in enumerate(TL["scenes"]):
+    STARTS[_s["id"]] = (_f + (OVERLAP / 2 if _i else 0)) / FPS
+    _f += _s["frames"] - OVERLAP
+_f += OVERLAP
 CUTS = sorted(v for v in STARTS.values() if v > 0)
 
 SR = 44100
 DUR = _f / FPS            # matches the video exactly
 BPM = 120
 BEAT = 60 / BPM           # 0.5 s
-REVEAL = STARTS["browser"]  # the product appears: the drop
+REVEAL = STARTS.get("browser", STARTS.get("product"))  # the product appears: the drop
 CTA = STARTS["end"]         # the end card
 N = int(DUR * SR)
 rng = np.random.default_rng(7)  # fixed seed: same track every run
