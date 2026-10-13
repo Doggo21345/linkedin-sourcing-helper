@@ -10,11 +10,16 @@
     <a id="settings-link" href="#" title="Settings">⚙︎</a>
   </header>
 
+  <div id="update-banner" class="banner" hidden>
+    <span id="update-text"></span>
+    <a href="https://github.com/Doggo21345/linkedin-sourcing-helper#updating" target="_blank">How to update</a>
+  </div>
+
   <nav class="tabs" role="tablist">
     <button class="tab" role="tab" data-tab="job" id="tab-job">Job</button>
     <button class="tab" role="tab" data-tab="person" id="tab-person">Person</button>
     <button class="tab" role="tab" data-tab="find" id="tab-find">Find</button>
-    <button class="tab" role="tab" data-tab="saved" id="tab-saved">Saved <span id="contact-count" class="badge">0</span></button>
+    <button class="tab" role="tab" data-tab="saved" id="tab-saved">Saved <span id="contact-count" class="badge">0</span><span id="due-count" class="badge due" hidden></span></button>
   </nav>
 
   <!-- Job: the posting you're on, and the people behind it -->
@@ -42,11 +47,19 @@
         <button id="copy-bool" class="secondary">Copy</button>
       </div>
 
-      <h2>Hiring manager posts</h2>
-      <ul id="hm-links" class="links"></ul>
+      <div id="job-saved" class="muted hint" hidden></div>
 
-      <h2>Recruiters & people</h2>
-      <ul id="sourcer-links" class="links"></ul>
+      <h2>Start here</h2>
+      <ul id="start-links" class="links start"></ul>
+
+      <details id="more-searches">
+        <summary>More searches</summary>
+        <h2>Hiring manager posts</h2>
+        <ul id="hm-links" class="links"></ul>
+
+        <h2>Recruiters & people</h2>
+        <ul id="sourcer-links" class="links"></ul>
+      </details>
       <p class="muted hint">Open someone's profile from these searches, then click the extension again: the <strong>Person</strong> tab finds their email and saves them to this job.</p>
 
       <h2>Live people search (People Data Labs)</h2>
@@ -86,6 +99,7 @@
 
     <div class="row">
       <button id="person-find">Find email</button>
+      <button id="person-write" class="secondary">Write message</button>
       <button id="person-save" class="secondary">Save</button>
     </div>
     <div id="person-result"></div>
@@ -151,7 +165,16 @@
 
   <!-- Saved: everyone you've saved, from either tab -->
   <section id="panel-saved" class="panel" hidden>
+    <div id="due-section" hidden>
+      <h2>Follow-ups due <span id="due-badge" class="badge due"></span></h2>
+      <ul id="due-list" class="contacts due-list"></ul>
+    </div>
     <p id="contacts-guess-note" class="disclaimer small" hidden></p>
+    <div class="row saved-filter">
+      <label class="field-label inline" for="saved-stage">Show
+        <select id="saved-stage"><option value="">Everyone</option></select>
+      </label>
+    </div>
     <ul id="contacts" class="contacts"></ul>
     <p id="contacts-empty" class="muted">Nobody saved yet. Use <strong>Save</strong> or <strong>Find email</strong> on the Job or Person tab.</p>
     <div class="row">
@@ -161,6 +184,40 @@
     </div>
     <div id="contacts-status" class="muted"></div>
   </section>
+
+  <!-- Write message: opened from any person, in any tab -->
+  <div id="compose" class="compose" hidden>
+    <div class="compose-card">
+      <div class="compose-head">
+        <strong>Write message</strong>
+        <button id="compose-close" class="remove" title="Close">×</button>
+      </div>
+      <div id="compose-who" class="muted"></div>
+      <div id="compose-kinds" class="row kinds"></div>
+      <div id="compose-subject-row">
+        <label class="field-label" for="compose-subject">Subject</label>
+        <input id="compose-subject" type="text" />
+      </div>
+      <textarea id="compose-body" rows="9"></textarea>
+      <div class="compose-meta"><span id="compose-count" class="muted"></span></div>
+      <div id="compose-missing" class="disclaimer small" hidden></div>
+      <div class="row">
+        <button id="compose-copy">Copy</button>
+        <button id="compose-ai" class="secondary">AI personalize <span id="compose-ai-badge" class="badge">needs key</span></button>
+      </div>
+      <div class="row">
+        <button id="compose-profile" class="secondary small">Open profile</button>
+        <button id="compose-mail" class="secondary small">Open in email app</button>
+        <button id="compose-messaged" class="secondary small">Mark as messaged</button>
+      </div>
+      <div id="compose-status" class="muted hint"></div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <a id="report-link" href="#" target="_blank">Report a problem</a>
+    <span class="muted" id="version-label"></span>
+  </footer>
 
   <script type="module" src="popup.js"></script>
 </body>

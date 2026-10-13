@@ -28,13 +28,41 @@ moving it removes the extension.
 
 The popup has four tabs. It opens on whichever one matches the page you're on.
 
+Open it with the toolbar icon or **Alt+Shift+S**.
+
 ### Job: find the people behind a posting
 1. Open a job posting on LinkedIn (`linkedin.com/jobs/view/...`) and click the Sourcing Helper icon.
 2. Check the **Role** and **Company** it read. Edit either one if it's wrong, then click **Rebuild links**.
-3. Click any link to run that search in a new tab:
+3. **Start here** shows the three searches most worth a first click, each with why: the company's
+   recruiters, the manager the role reports to (when the posting names one) or people posting
+   that they're hiring, and the team you'd join. Everything else is under **More searches**:
    - **Hiring manager posts:** people posting that they're hiring for this kind of role.
    - **Recruiters & people:** recruiters, the team named in the posting, and people doing the work.
 4. With a People Data Labs key, **Find recruiters** lists actual people, each with a **Find email** button.
+
+### Write message (free, with optional AI)
+**Write message** is on every person, in every tab. It opens a ready-to-send message with their
+name, the role, the company, and the posting's **Job ID** filled in, in four kinds: connection
+note (kept under LinkedIn's 200-character limit), LinkedIn message, email, and follow-up. The tone
+changes with who they are: recruiter, manager, or someone on the team.
+
+- Free: the templates need no key. Fill in **⚙︎ Settings → About you** once (name, school, year,
+  major, one line about something you built) and they're complete; anything still missing shows as
+  a `[placeholder]` and is flagged before you send.
+- **AI personalize** rewrites the message for that person using your own Claude key. It's told to
+  use only the facts you gave it, but read it over before sending.
+- The Job ID is the company's own requisition number from the posting text (what a recruiter types
+  into their system), not LinkedIn's ID from the URL.
+
+### Follow-ups: a lightweight CRM
+Every saved person has a stage: **Saved → Messaged → Replied → Call booked → Referred**, or
+**No response**. Click **Mark as messaged** after you send, and a follow-up is scheduled:
+
+- 5 days later, then once more 7 days after that, then it stops. A third follow-up rarely helps.
+- Due follow-ups show as a red count on the extension icon and at the top of the **Saved** tab, with
+  **Write follow-up**, **Snooze 3d**, **Replied**, and **Stop**. You also get one Chrome notification
+  a day when something's due (turn it off in Settings).
+- The Job tab shows how many people you've saved and messaged for the posting you're on.
 
 ### Person: find someone's email from their profile
 1. From one of those searches, open someone's LinkedIn profile and click the icon again.
@@ -153,6 +181,10 @@ Please be a good sender: keep cold emails personal and few, and stop when someon
 
 ## Updating
 
+Version 0.6.0 and later check GitHub once a day and show a banner in the popup when a newer version
+is out. (Versions before 0.6.0 can't, so if you installed earlier, update once by hand.)
+
+
 - **Downloaded the ZIP:** download it again, replace the old folder with the new one (same location), then click the ↻ reload icon on the extension's card in `chrome://extensions`.
 - **Cloned:** `git pull`, then click ↻ reload.
 
@@ -164,6 +196,9 @@ Please be a good sender: keep cold emails personal and few, and stop when someon
 - **People Data Labs:** when you click a "Find people" button, the company name and search terms are sent to `api.peopledatalabs.com`.
 - **Find tab:** checking company boards fetches their public job listings from Greenhouse, Lever, and Ashby. No personal data is sent; the Google search links just open Google.
 - **Person tab:** when you open the popup on a LinkedIn profile, it reads the name, headline, and current company shown on that page. Nothing is sent anywhere until you click Find email.
+- **AI personalize:** only when you click it, the recipient's name, title, and company, the job title and Job ID, your About-you details, and the draft are sent to `api.anthropic.com` with your key.
+- **Update check:** once a day it reads this repo's public `manifest.json` from GitHub to compare version numbers. Nothing is sent.
+- **Follow-up reminders** are worked out on your device from your saved contacts.
 - **Domain lookup:** when no domain is known, the company name is sent to Clearbit's free company lookup (`autocomplete.clearbit.com`).
 - **Find email:** the person's name, company or domain, and LinkedIn URL are sent to the finders you've added keys for (Hunter, People Data Labs), and candidate addresses are sent to your verifier (MillionVerifier, ZeroBounce, or Hunter). Only when you click a Find email button.
 - Saved contacts and remembered emails stay in Chrome's local extension storage on your device. Clear them from the popup and ⚙︎ settings.
@@ -179,7 +214,7 @@ Please be a good sender: keep cold emails personal and few, and stop when someon
 ## Feedback
 
 Found a bug or have an idea? [Open an issue](https://github.com/Doggo21345/linkedin-sourcing-helper/issues).
-To work on the code, see **How it works** below. Run the tests with `python3 test/run.py` (it also runs `test/email_test.py`, `test/profile_test.py`, and `test/boards_test.py`).
+To work on the code, see **How it works** below. Run the tests with `python3 test/run.py` (it also runs the email, profile, board, and outreach suites). `test/smoke/run.sh` loads the real popup in a simulated browser and clicks through the Job, Person, and Saved flows (needs node).
 
 ---
 

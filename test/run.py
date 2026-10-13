@@ -277,7 +277,10 @@ def main():
     print()
     import boards_test
     boards_failed = boards_test.main()
-    return 1 if failures or email_failed or profile_failed or boards_failed else 0
+    print()
+    import outreach_test
+    outreach_failed = outreach_test.main()
+    return 1 if failures or email_failed or profile_failed or boards_failed or outreach_failed else 0
 
 
 if __name__ == "__main__":

@@ -23,8 +23,11 @@ async function load() {
   const s = await chrome.storage.sync.get([
     "extractionMode", "anthropicApiKey", "model", "pdlApiKey",
     "hunterApiKey", "millionverifierApiKey", "zerobounceApiKey",
-    "emailVerifier", "emailSteps", "maxVerifications", "maxGuesses"
+    "emailVerifier", "emailSteps", "maxVerifications", "maxGuesses", "me", "remindersOff"
   ]);
+  const me = s.me || {};
+  for (const k of ["name", "school", "year", "major", "pitch"]) $(`me-${k}`).value = me[k] || "";
+  $("reminders-off").checked = Boolean(s.remindersOff);
   const mode = s.extractionMode || "local";
   document.querySelector(`input[name=mode][value="${mode}"]`).checked = true;
   $("apiKey").value = s.anthropicApiKey || "";
@@ -59,7 +62,10 @@ async function save() {
     emailVerifier: $("verifier").value,
     emailSteps: [...document.querySelectorAll("#steps input:checked")].map((i) => i.value),
     maxVerifications: count("maxVerifications", 4),
-    maxGuesses: count("maxGuesses", 3)
+    maxGuesses: count("maxGuesses", 3),
+    // The one-liner finishes "I'm a junior at X, and ...", so drop a trailing period.
+    me: Object.fromEntries(["name", "school", "year", "major", "pitch"].map((k) => [k, $(`me-${k}`).value.trim().replace(k === "pitch" ? /[.\s]+$/ : /$^/, "")])),
+    remindersOff: $("reminders-off").checked
   });
   const saved = $("saved");
   saved.textContent = "Saved ✓";

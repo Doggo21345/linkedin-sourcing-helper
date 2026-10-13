@@ -4,6 +4,7 @@
 
 import { findEmail, DEFAULT_STEPS, normalizeDomain } from "./lib/email.js";
 import { BOARD_API, normalizeJobs, isInternship, parseBoardEntry, slugsFor } from "./lib/boards.js";
+import { dueFollowUps } from "./lib/crm.js";
 
 const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
 
@@ -305,7 +306,156 @@ async function checkBoards(lines, force) {
   return { ok: true, jobs, checked: entries.length, unknown, errors };
 }
 
+// ---- AI personalization (the user's own Claude key) ----------------------------
+
+const MESSAGE_RULES = {
+  connect: (limit) => `a LinkedIn connection note of at most ${limit} characters, one or two sentences`,
+  message: () => "a LinkedIn message of at most 120 words",
+  email: () => "an email: a short subject line and a body of at most 150 words",
+  followup: () => "a polite follow-up of at most 60 words"
+};
+
+const AI_SYSTEM = `You rewrite a student's outreach message to one specific person about a job, so it reads like the student wrote it for that person.
+Rules:
+- Use ONLY the facts provided. Never invent experiences, numbers, projects, mutual connections, or anything about the recipient beyond their title and company.
+- Keep any [bracketed placeholders] exactly as they are. Keep the Job ID if one is given.
+- Warm, specific, plain. No flattery, no clichés ("I hope this finds you well"), no emojis, no exclamation-mark pileups.
+- One clear, small ask.
+Return ONLY minified JSON: {"subject": string, "body": string}. Use "" for subject unless it's an email.`;
+
+function trimTo(text, limit) {
+  if (!limit || text.length <= limit) return text;
+  const cut = text.slice(0, limit);
+  const end = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
+  return end > limit * 0.6 ? cut.slice(0, end + 1) : cut.slice(0, cut.lastIndexOf(" ")) + "…";
+}
+
+async function aiMessage({ kind, draft, person, job, me, limit }) {
+  const { anthropicApiKey, model } = await chrome.storage.sync.get(["anthropicApiKey", "model"]);
+  if (!anthropicApiKey) return { ok: false, error: "no-key" };
+  const rule = (MESSAGE_RULES[kind] || MESSAGE_RULES.message)(limit);
+  const facts = {
+    recipient: { name: person?.name, title: person?.title, company: person?.company },
+    job: { title: job?.title, company: job?.company, jobId: job?.reqId || "" },
+    sender: me || {},
+    draft
+  };
+  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": anthropicApiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true"
+    },
+    body: JSON.stringify({
+      model: model || DEFAULT_MODEL,
+      max_tokens: 600,
+      system: AI_SYSTEM,
+      messages: [{ role: "user", content: `Write ${rule}.\n\n${JSON.stringify(facts)}` }]
+    })
+  });
+  if (!resp.ok) return { ok: false, error: `api-${resp.status}`, detail: (await resp.text()).slice(0, 200) };
+  const data = await resp.json();
+  const raw = (data.content?.[0]?.text || "").trim().replace(/^```(json)?|```$/g, "").trim();
+  let out;
+  try {
+    out = JSON.parse(raw);
+  } catch {
+    return { ok: false, error: "parse", detail: raw.slice(0, 120) };
+  }
+  if (typeof out.body !== "string" || !out.body.trim()) return { ok: false, error: "empty" };
+  return { ok: true, subject: typeof out.subject === "string" ? out.subject : "", body: trimTo(out.body.trim(), limit) };
+}
+
+// ---- Follow-up reminders --------------------------------------------------------
+
+async function refreshFollowUps({ notify } = {}) {
+  const { contacts } = await chrome.storage.local.get(["contacts"]);
+  const due = dueFollowUps(Array.isArray(contacts) ? contacts : []);
+  await chrome.action.setBadgeBackgroundColor({ color: "#b42318" });
+  await chrome.action.setBadgeText({ text: due.length ? String(due.length) : "" });
+  if (!notify || !due.length) return;
+
+  // At most one notification a day, and none if they've been turned off.
+  const { remindersOff } = await chrome.storage.sync.get(["remindersOff"]);
+  const { notifiedOn } = await chrome.storage.local.get(["notifiedOn"]);
+  const today = new Date().toISOString().slice(0, 10);
+  if (remindersOff || notifiedOn === today) return;
+  await chrome.storage.local.set({ notifiedOn: today });
+  const names = due.slice(0, 3).map(({ c }) => [c.first, c.last].filter(Boolean).join(" ") + (c.company ? ` (${c.company})` : ""));
+  chrome.notifications.create("followups", {
+    type: "basic",
+    iconUrl: "icons/icon128.png",
+    title: `${due.length} follow-up${due.length === 1 ? "" : "s"} due`,
+    message: `${names.join(", ")}${due.length > 3 ? ", and more" : ""}. Click to write them.`,
+    priority: 0
+  });
+}
+
+chrome.notifications.onClicked.addListener((id) => {
+  if (id === "followups") chrome.tabs.create({ url: chrome.runtime.getURL("popup/popup.html?tab=saved") });
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes.contacts) refreshFollowUps();
+});
+
+// ---- Update check ---------------------------------------------------------------------
+
+const MANIFEST_URL = "https://raw.githubusercontent.com/Doggo21345/linkedin-sourcing-helper/master/manifest.json";
+
+function newer(a, b) {
+  const pa = String(a).split(".").map(Number);
+  const pb = String(b).split(".").map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
+  }
+  return false;
+}
+
+// Installed from a GitHub download, the extension can't update itself, so it
+// checks the repo's manifest once a day and the popup says when there's a newer one.
+async function checkForUpdate() {
+  try {
+    const r = await fetch(MANIFEST_URL, { cache: "no-store" });
+    if (!r.ok) return;
+    const latest = (await r.json()).version;
+    const mine = chrome.runtime.getManifest().version;
+    await chrome.storage.local.set({ updateAvailable: newer(latest, mine) ? latest : "" });
+  } catch (e) {
+    // Offline or GitHub unreachable: try again tomorrow.
+  }
+}
+
+// ---- Lifecycle -------------------------------------------------------------------------
+
+function scheduleAlarms() {
+  chrome.alarms.create("followups", { periodInMinutes: 60 });
+  chrome.alarms.create("update-check", { periodInMinutes: 24 * 60, delayInMinutes: 1 });
+}
+
+chrome.runtime.onInstalled.addListener(({ reason }) => {
+  scheduleAlarms();
+  refreshFollowUps();
+  if (reason === "install") chrome.tabs.create({ url: chrome.runtime.getURL("welcome/welcome.html") });
+});
+chrome.runtime.onStartup.addListener(() => {
+  scheduleAlarms();
+  refreshFollowUps({ notify: true });
+});
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === "followups") refreshFollowUps({ notify: true });
+  if (alarm.name === "update-check") checkForUpdate();
+});
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type === "AI_MESSAGE") {
+    aiMessage(msg)
+      .then(sendResponse)
+      .catch((e) => sendResponse({ ok: false, error: "exception", detail: String(e) }));
+    return true;
+  }
   if (msg?.type === "CHECK_BOARDS") {
     checkBoards(msg.lines || [], msg.force)
       .then(sendResponse)

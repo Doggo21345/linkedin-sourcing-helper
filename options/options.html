@@ -21,6 +21,18 @@
   <h1>Sourcing Helper — Settings</h1>
 
   <fieldset>
+    <legend>About you (fills in your messages)</legend>
+    <p class="muted">Used only to fill in the message templates on this device. Nothing here is sent anywhere unless you click <strong>AI personalize</strong>.</p>
+    <label>Your name <input type="text" id="me-name" placeholder="e.g. Alex Kim" /></label>
+    <label>School <input type="text" id="me-school" placeholder="e.g. UT Austin" /></label>
+    <label>Year <input type="text" id="me-year" placeholder="e.g. junior, sophomore, class of 2028" /></label>
+    <label>Major <input type="text" id="me-major" placeholder="e.g. computer science" /></label>
+    <label>One line about you <input type="text" id="me-pitch" placeholder="e.g. I recently built a Chrome extension used by 100+ students" /></label>
+    <p class="muted">Write the last one as a sentence that finishes "I'm a junior at UT Austin, and ..." Something specific you built or did works best.</p>
+    <label class="radio"><input type="checkbox" id="reminders-off" /> <span>Turn off follow-up notifications (the badge on the icon still shows what's due)</span></label>
+  </fieldset>
+
+  <fieldset>
     <legend>Extraction engine</legend>
     <label class="radio">
       <input type="radio" name="mode" value="local" />
@@ -33,7 +45,7 @@
   </fieldset>
 
   <fieldset>
-    <legend>Claude API</legend>
+    <legend>Claude API (reading postings, and AI personalize for messages)</legend>
     <label>API key
       <input type="password" id="apiKey" placeholder="sk-ant-..." autocomplete="off" />
     </label>

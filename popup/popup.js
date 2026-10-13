@@ -3,6 +3,9 @@ import { buildQueries, countOperators, isEarlyCareer } from "../lib/query.js";
 import { displayName, normalizeDomain, contactsToCsv, contactsToTsv, VERIFIER_TOOLS } from "../lib/email.js";
 import { companyFromHeadline, cleanProfileName, profileUrl } from "../lib/profile.js";
 import { buildBoardSearch, filterJobs, ago, DEFAULT_BOARDS, BOARD_SITES, COUNTRIES } from "../lib/boards.js";
+import { extractReqId } from "../lib/messages.js";
+import { STAGES, stageOf, markMessaged, setStage, snooze, dueFollowUps, isLastFollowUp, linkedinJobId } from "../lib/crm.js";
+import { openCompose, wireCompose } from "./compose.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -358,9 +361,48 @@ function renderDetection(q, ext) {
 }
 
 // Rebuild the persona link lists from whatever is in the Boolean box.
+// The three searches most worth a first click, each with why. Everything else
+// is under "More searches", so a first-time user isn't facing a wall of links.
+function startHere(q) {
+  const picks = [];
+  const add = (item, why) => {
+    if (item?.url && !picks.some((p) => p.url === item.url)) picks.push({ ...item, why });
+  };
+  add(q.sourcer.find((l) => /recruit/i.test(l.label) && !/x-ray/i.test(l.label)),
+    "Recruiters run the hiring process. Message them with the Job ID after you apply.");
+  add(q.hiringManager.find((l) => /^Reports to:/.test(l.label)),
+    "The manager this role reports to, named in the posting.");
+  add(q.hiringManager.find((l) => l.editable),
+    "People posting that they're hiring for this role, often the hiring manager.");
+  add(q.sourcer.find((l) => / team members$| alumni & recruiters$/.test(l.label)) ||
+    q.sourcer.find((l) => / peers \(at the company\)$/.test(l.label)),
+    "People on the team or program you'd join. Ask for a 15-minute chat, or a referral.");
+  return picks.slice(0, 3);
+}
+
+function renderStart(q) {
+  const ul = $("start-links");
+  ul.innerHTML = "";
+  for (const { label, url, why } of startHere(q)) {
+    const li = document.createElement("li");
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.textContent = label;
+    const w = document.createElement("span");
+    w.className = "why";
+    w.textContent = why;
+    a.appendChild(w);
+    li.appendChild(a);
+    ul.appendChild(li);
+  }
+}
+
 function renderFromExt(ext) {
   const q = buildQueries(ext);
   $("boolean").value = q.boolean;
+  renderStart(q);
   renderLinks("hm-links", q.hiringManager);
   renderLinks("sourcer-links", q.sourcer);
   renderDetection(q, ext);
@@ -389,6 +431,7 @@ function rebuild(ext) {
       };
     });
 
+  renderStart({ ...q, hiringManager: applyEdited(q.hiringManager) });
   renderLinks("hm-links", applyEdited(q.hiringManager));
   renderLinks("sourcer-links", q.sourcer);
 }
@@ -539,6 +582,33 @@ async function storeContacts(list) {
  * Adds or updates a contact. Works with no email too: saving someone from their
  * profile before (or instead of) looking up their address is the Apollo flow.
  */
+function sameContact(a, b) {
+  if (a.linkedin && b.linkedin) return a.linkedin === b.linkedin;
+  if (a.email && b.email) return a.email === b.email;
+  return Boolean(a.first) && a.first === b.first && a.last === b.last && a.company === b.company;
+}
+
+/** Apply fn to the saved contact matching `who`, if there is one. */
+async function updateContact(who, fn) {
+  const list = await loadContacts();
+  const i = list.findIndex((c) => sameContact(c, who));
+  if (i < 0) return null;
+  list[i] = fn(list[i]);
+  await storeContacts(list);
+  return list[i];
+}
+
+function contactPerson(c) {
+  return {
+    name: [c.first, c.last].filter(Boolean).join(" "),
+    first: c.first, last: c.last, title: c.title, company: c.company, linkedin: c.linkedin, email: c.email
+  };
+}
+
+function contactJob(c) {
+  return { title: c.job, url: c.jobUrl, company: c.company, reqId: c.reqId };
+}
+
 async function saveContact(person, result, job) {
   const { first, last } = displayName(person.name);
   const contact = {
@@ -551,13 +621,14 @@ async function saveContact(person, result, job) {
     linkedin: person.linkedin || "",
     job: job?.title || "",
     jobUrl: job?.url || "",
+    jobKey: job?.linkedinJobId || linkedinJobId(job?.url),
+    reqId: job?.reqId || "",
     source: result?.source || "",
     foundOn: new Date().toISOString().slice(0, 10)
   };
   if (!contact.first && !contact.email) return null;
   const list = await loadContacts();
-  const same = (c) =>
-    (contact.linkedin && c.linkedin === contact.linkedin) || (contact.email && c.email === contact.email);
+  const same = (c) => sameContact(c, contact);
   const i = list.findIndex(same);
   if (i >= 0) {
     // Never wipe what's already known: a re-save without an email keeps the old one.
@@ -571,6 +642,37 @@ async function saveContact(person, result, job) {
   return i >= 0 ? "updated" : "added";
 }
 
+function stageSelect(c, onChange) {
+  const sel = document.createElement("select");
+  sel.className = "stage";
+  for (const [value, label] of STAGES) {
+    const o = document.createElement("option");
+    o.value = value;
+    o.textContent = label;
+    sel.appendChild(o);
+  }
+  sel.value = stageOf(c);
+  sel.title = c.lastContacted ? `Last contacted ${c.lastContacted}` : "Not contacted yet";
+  sel.addEventListener("change", () => onChange(sel.value));
+  return sel;
+}
+
+function actButton(label, title, onClick) {
+  const b = document.createElement("button");
+  b.className = "act";
+  b.textContent = label;
+  b.title = title;
+  b.addEventListener("click", onClick);
+  return b;
+}
+
+function writeTo(c, kind) {
+  openCompose(contactPerson(c), contactJob(c), {
+    kind,
+    onMessaged: () => updateContact(c, (x) => markMessaged(x))
+  });
+}
+
 function renderContacts(list) {
   $("contact-count").textContent = String(list.length);
   $("contacts-empty").hidden = list.length > 0;
@@ -579,9 +681,39 @@ function renderContacts(list) {
   $("contacts-guess-note").textContent = guesses
     ? `${guesses} of these ${guesses === 1 ? "is a guess" : "are guesses"} (not ✓). Verify before sending; the export marks them "unverified guess".`
     : "";
+
+  // Follow-ups due, first: the part of outreach people forget.
+  const due = dueFollowUps(list);
+  $("due-section").hidden = !due.length;
+  $("due-count").hidden = !due.length;
+  $("due-count").textContent = String(due.length);
+  $("due-badge").textContent = String(due.length);
+  const dueUl = $("due-list");
+  dueUl.innerHTML = "";
+  for (const { c } of due) {
+    const li = document.createElement("li");
+    const who = document.createElement("span");
+    who.className = "who";
+    who.textContent = [c.first, c.last].filter(Boolean).join(" ") + (c.company ? ` · ${c.company}` : "");
+    const when = document.createElement("span");
+    when.className = "when";
+    when.textContent = `Follow-up #${c.touches || 1} due ${c.followUpAt}${isLastFollowUp(c) ? " (last one)" : ""}`;
+    li.append(
+      who,
+      actButton("Write follow-up", "Opens a follow-up message", () => writeTo(c, "followup")),
+      actButton("Snooze 3d", "Remind me in 3 days", () => updateContact(c, (x) => snooze(x, 3))),
+      actButton("Replied", "They wrote back: stop reminders", () => updateContact(c, (x) => setStage(x, "replied"))),
+      actButton("Stop", "No more reminders for this person", () => updateContact(c, (x) => setStage(x, "closed"))),
+      when
+    );
+    dueUl.appendChild(li);
+  }
+
+  const filter = $("saved-stage").value;
   const ul = $("contacts");
   ul.innerHTML = "";
   list.forEach((c, i) => {
+    if (filter && stageOf(c) !== filter) return;
     const li = document.createElement("li");
     const who = document.createElement("span");
     who.className = "who";
@@ -609,7 +741,13 @@ function renderContacts(list) {
       current.splice(i, 1);
       await storeContacts(current);
     });
-    li.append(who, chip, remove);
+    li.append(
+      who,
+      chip,
+      stageSelect(c, (stage) => updateContact(c, (x) => setStage(x, stage))),
+      actButton("✉", "Write message", () => writeTo(c)),
+      remove
+    );
     ul.appendChild(li);
   });
 }
@@ -620,6 +758,18 @@ function flash(text) {
 }
 
 function wireContacts() {
+  const filter = $("saved-stage");
+  for (const [value, label] of STAGES) {
+    const o = document.createElement("option");
+    o.value = value;
+    o.textContent = label;
+    filter.appendChild(o);
+  }
+  filter.addEventListener("change", () => loadContacts().then(renderContacts));
+  // Changes made elsewhere (another popup, the background alarm) show up here.
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes.contacts) renderContacts(changes.contacts.newValue || []);
+  });
   $("copy-sheets").addEventListener("click", async () => {
     const list = await loadContacts();
     if (!list.length) return flash("No contacts yet.");
@@ -756,6 +906,18 @@ async function wirePerson(tab) {
     company: $("person-company").value.trim(),
     domain: $("person-domain").value.trim(),
     linkedin: $("person-linkedin").value.trim()
+  });
+
+  $("person-write").addEventListener("click", async () => {
+    const person = readForm();
+    if (!person.name) return personStatus("Enter a name first.", true);
+    // Saved first, so "Mark as messaged" has someone to track.
+    await saveContact(person, null, job);
+    const who = { linkedin: person.linkedin, email: "", ...displayName(person.name), company: person.company };
+    const saved = (await loadContacts()).find((c) => sameContact(c, who));
+    openCompose({ ...person, email: saved?.email || "" }, job || {}, {
+      onMessaged: () => updateContact(saved || who, (x) => markMessaged(x))
+    });
   });
 
   $("person-save").addEventListener("click", async () => {
@@ -1019,9 +1181,19 @@ function renderPeople(people, ext, job) {
     };
     find.addEventListener("click", run);
     runners.push(run);
+    const write = document.createElement("button");
+    write.className = "secondary small";
+    write.textContent = "Write message";
+    write.addEventListener("click", async () => {
+      await saveContact(person, null, job);
+      const saved = (await loadContacts()).find((c) => sameContact(c, { linkedin: person.linkedin, email: "", ...displayName(person.name), company: person.company }));
+      openCompose({ ...person, email: saved?.email || "" }, job, {
+        onMessaged: () => updateContact(saved || { linkedin: person.linkedin }, (x) => markMessaged(x))
+      });
+    });
     // PDL withholds names on some plans; there's nothing to build an address from.
     if (p.name === "(name withheld)") find.disabled = true;
-    li.append(find, out);
+    li.append(find, write, out);
     ul.appendChild(li);
   }
 
@@ -1145,7 +1317,20 @@ async function initJobTab(tab) {
   $("posting").hidden = false;
   renderFromExt(ext);
 
-  const job = { title: posting.title || "", url: posting.url || tab.url || "", company: ext.company || posting.company || "" };
+  const url = posting.url || tab.url || "";
+  const job = {
+    title: posting.title || "",
+    url,
+    company: ext.company || posting.company || "",
+    reqId: extractReqId(posting.description),
+    linkedinJobId: linkedinJobId(url)
+  };
+  const forJob = (await loadContacts()).filter((c) => job.linkedinJobId && c.jobKey === job.linkedinJobId);
+  if (forJob.length) {
+    $("job-saved").hidden = false;
+    const msgd = forJob.filter((c) => stageOf(c) !== "saved").length;
+    $("job-saved").textContent = `You've saved ${forJob.length} ${forJob.length === 1 ? "person" : "people"} for this job, ${msgd} messaged. See the Saved tab.`;
+  }
   await rememberJob(job);
   wirePdl(ext, job);
 
@@ -1176,15 +1361,34 @@ async function main() {
   });
   wireTabs();
   wireContacts();
+  wireCompose();
+
+  const version = chrome.runtime.getManifest().version;
+  $("version-label").textContent = `v${version}`;
+  const { updateAvailable } = await chrome.storage.local.get(["updateAvailable"]);
+  if (updateAvailable && updateAvailable !== version) {
+    $("update-banner").hidden = false;
+    $("update-text").textContent = `Version ${updateAvailable} is out (you have ${version}).`;
+  }
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const url = tab?.url || "";
   const onLinkedIn = /^https:\/\/([\w-]+\.)?linkedin\.com\//.test(url);
   const onProfile = onLinkedIn && /linkedin\.com\/in\//.test(url);
 
+  // The bug report carries the version and which kind of page it was, never
+  // the page itself or anything about the user.
+  const pageKind = onProfile ? "profile" : /\/jobs\//.test(url) ? "job posting" : onLinkedIn ? "other LinkedIn page" : "not LinkedIn";
+  $("report-link").href = "https://github.com/Doggo21345/linkedin-sourcing-helper/issues/new?" + new URLSearchParams({
+    title: "",
+    body: `**What happened?**\n\n\n**What did you expect?**\n\n\n---\nVersion: ${version}\nPage: ${pageKind}\nBrowser: ${navigator.userAgentData?.brands?.map((b) => b.brand).join(", ") || "Chrome"}`
+  });
+
   // Open on the tab that matches the page: a profile goes straight to Person,
-  // and anywhere off LinkedIn opens Find.
-  showTab(onProfile ? "person" : onLinkedIn ? "job" : "find");
+  // anywhere off LinkedIn opens Find, and a follow-up notification opens Saved.
+  const asked = new URLSearchParams(location.search).get("tab");
+  showTab(asked || (onProfile ? "person" : onLinkedIn ? "job" : "find"));
+  if (asked) return wirePerson(null);
   wireFind();
   await wirePerson(tab);
 

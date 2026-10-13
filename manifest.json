@@ -1,12 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Sourcing Helper — Boolean & X-ray Builder",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "Reads the job posting you're viewing and builds Boolean + X-ray search links to source candidates and related posts.",
   "permissions": [
     "activeTab",
     "scripting",
-    "storage"
+    "storage",
+    "alarms",
+    "notifications"
   ],
   "host_permissions": [
     "https://www.linkedin.com/*",
@@ -18,7 +20,8 @@
     "https://boards-api.greenhouse.io/*",
     "https://api.lever.co/*",
     "https://api.ashbyhq.com/*",
-    "https://autocomplete.clearbit.com/*"
+    "https://autocomplete.clearbit.com/*",
+    "https://raw.githubusercontent.com/*"
   ],
   "action": {
     "default_title": "Sourcing Helper",
@@ -45,5 +48,14 @@
       ],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+Shift+S",
+        "mac": "Alt+Shift+S"
+      },
+      "description": "Open Sourcing Helper"
+    }
+  }
 }
