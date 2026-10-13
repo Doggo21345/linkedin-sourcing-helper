@@ -6,9 +6,9 @@ past interns, and people posting about the role. It **does not** scrape people
 results or automate LinkedIn. It only reads the posting on screen and hands you
 searches to run yourself.
 
-<!-- DEMO VIDEO: in GitHub's web editor, drag an .mp4 (under 10 MB) onto the line below
-     and it becomes an embedded player. Or commit docs/demo.gif and use ![Demo](docs/demo.gif). -->
-**Demo:** _coming soon_
+[![Watch the 37-second trailer](docs/trailer-poster.png)](docs/trailer.mp4)
+
+**[▶ Watch the trailer](docs/trailer.mp4)** (37 seconds). Square version for social: [docs/trailer-square.mp4](docs/trailer-square.mp4).
 
 ## Install (about 1 minute)
 
@@ -276,6 +276,7 @@ backfill the rest.
 - `background.js` — proxies Claude, People Data Labs, and the email providers (keeps keys/CORS out of page context), and caches email results.
 - `popup/` — UI: editable Boolean box + grouped search links.
 - `options/` — settings (mode, API key, model).
+- `promo/` — the trailer's source ([Remotion](https://www.remotion.dev)); see `promo/README.md`.
 
 ### The two rules that decide whether a search returns anything
 
