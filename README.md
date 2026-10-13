@@ -205,7 +205,7 @@ that actually name humans:
 
 | Signal | Where it comes from | What it powers |
 |---|---|---|
-| **Team / org** | "join the **Earned Media** team", "part of the **Story and Franchise Development** group" | people on that team via the company People tab, plus a "team + hiring" posts search |
+| **Team / org** | "join the **Earned Media** team", "part of the **Story and Franchise Development** group" | people on that team, filtered to the company, plus a "team + hiring" posts search |
 | **Program** | "the **State Farm University Internship Program**" | past interns and the recruiters who ran the program |
 | **Reporting line** | "you will report to the **Director of Analytics**" | the one manager search that isn't a guess |
 | **Themes** | recurring bigrams in the qualifications section | "people doing *media relations*" at the company |
@@ -284,9 +284,12 @@ so this is asserted against the docs. It is here because `AND` chains
 demonstrably returned nothing. Everything routes through `LINKEDIN_JOINER`, so if
 `+` also comes up empty, change that one constant.
 
-Company **People tab** links are the exception and stay as plain unquoted
-keywords: that tab's company scope comes from the URL, so quoting and `+` would
-only narrow a search that is already correctly scoped.
+**Company-filtered people searches** are the exception and stay as plain unquoted
+keywords: their company scope comes from LinkedIn's company filter
+(`currentCompany=["<id>"]`), so quoting and `+` would only narrow a search that is
+already correctly scoped. (These used to open the company's People tab; since Oct 2026
+LinkedIn sends that tab's search to the main people search with this filter, so the
+extension links there directly. The company's ID is read from the posting.)
 
 ### The Boolean operator budget (important)
 
@@ -306,7 +309,7 @@ Google X-ray has no such cap, which is why the wide searches go there and get th
 fuller term lists.
 
 Two related rules the popup follows:
-- `"hiring"` appears only in **Posts** queries. On the People tab every `AND`
+- `"hiring"` appears only in **Posts** queries. In a people search every `AND`
   term must be in the profile, and nobody writes "hiring" in their profile.
 - The operator count is shown live under the Company field, and turns red when a
   hand-edited query goes over budget.

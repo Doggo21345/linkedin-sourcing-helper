@@ -46,18 +46,21 @@ def run(ctx, title, company, description, location="", slug=None):
     search-bar fallback instead of the company People tab the browser uses."""
     if slug is None:
         slug = re.sub(r"[^a-z0-9]+", "-", company.lower()).strip("-")
+    # Any stable number works: it only has to reach the currentCompany filter.
+    company_id = str(10000 + sum(map(ord, company))) if company else ""
     posting = {
         "title": title,
         "company": company,
         "description": description,
         "location": location,
         "companySlug": slug,
+        "companyId": company_id,
     }
     ctx.eval("globalThis.P=" + json.dumps(posting))
     ctx.eval(
         'globalThis.E=extractLocal(P); E.roleName=P.title||""; '
         'E.description=P.description||""; '
-        'E.companySlug=P.companySlug||""; '
+        'E.companySlug=P.companySlug||""; E.companyId=P.companyId||""; '
         'if(!E.company)E.company=P.company||"";'
     )
     return json.loads(ctx.eval("globalThis.R=JSON.stringify(buildQueries(E))"))
@@ -233,6 +236,16 @@ def main():
         for link in r.get("hiringManager", []) + r.get("sourcer", []):
             if not link.get("url"):
                 problems.append("link with no url: %r" % link)
+            # LinkedIn's company People tab no longer runs keyword searches
+            # (Oct 2026): company scope must come from the currentCompany filter.
+            elif "/company/" in link["url"] and "linkedin.com" in link["url"]:
+                problems.append("old company People tab link: %r" % link["url"])
+        scoped = [l["url"] for l in r.get("sourcer", []) if "currentCompany=" in (l.get("url") or "")]
+        if case["company"] and not scoped:
+            problems.append("no company-filtered people search")
+        for u in scoped:
+            if "/search/results/people/" not in u or "%5B%22" not in u:
+                problems.append("malformed company filter: %r" % u)
         # Independent signals collapse onto the same search more often than you
         # would guess (head noun vs team name differ only in case), and LinkedIn
         # search is case-insensitive, so two links would run one query.

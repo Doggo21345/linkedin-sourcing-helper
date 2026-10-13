@@ -165,16 +165,65 @@ function scrapePostingInPage() {
   ]);
   domCompany = clean(domCompany.split("\n")[0]);
 
+  // The posting's own top card. Company links and IDs are read from here first,
+  // because on /jobs/search the sidebar is full of other companies' links.
+  const topCard = document.querySelector([
+    ".job-details-jobs-unified-top-card__container--two-pane",
+    ".job-details-jobs-unified-top-card__container",
+    ".jobs-unified-top-card",
+    ".top-card-layout",
+    ".jobs-search__job-details",
+    ".jobs-details"
+  ].join(", "));
+
   // The company's LinkedIn slug, taken from the company link on the posting.
-  // This is what lets us use linkedin.com/company/<slug>/people/, which scopes
-  // to the company by URL instead of hoping a keyword matches profile text.
   let companySlug = "";
-  for (const a of document.querySelectorAll('a[href*="/company/"]')) {
-    const m = (a.getAttribute("href") || "").match(/\/company\/([^/?#]+)/);
-    // Skip LinkedIn's own marketing/help links, which also live under /company/.
-    if (m && !/^(linkedin|admin|setup)$/i.test(m[1])) {
-      companySlug = m[1];
-      break;
+  for (const scope of [topCard, document].filter(Boolean)) {
+    for (const a of scope.querySelectorAll('a[href*="/company/"]')) {
+      const m = (a.getAttribute("href") || "").match(/\/company\/([^/?#]+)/);
+      // Skip LinkedIn's own marketing/help links, which also live under /company/.
+      if (m && !/^(linkedin|admin|setup)$/i.test(m[1])) {
+        companySlug = m[1];
+        break;
+      }
+    }
+    if (companySlug) break;
+  }
+
+  // The company's numeric ID. LinkedIn's people search scopes to a company with
+  // currentCompany=["<id>"], and since Oct 2026 the company People tab's search
+  // sends you there, so this ID is what company-scoped searches need.
+  const idIn = (s) => {
+    const str = String(s || "");
+    return (str.match(/\/company\/(\d+)(?:[/?#]|$)/) || str.match(/urn:li:(?:fsd_|fs_normalized_|fs_)?company:(\d+)/) || [])[1] || "";
+  };
+  let companyId = /^\d+$/.test(companySlug) ? companySlug : "";
+  if (!companyId && topCard) {
+    for (const a of topCard.querySelectorAll('a[href*="/company/"]')) {
+      companyId = idIn(a.getAttribute("href"));
+      if (companyId) break;
+    }
+    if (!companyId) companyId = idIn(topCard.outerHTML);
+  }
+  // The page's embedded data: the company's record holds both its slug
+  // ("universalName") and its ID, so take the ID nearest that slug.
+  if (!companyId && companySlug) {
+    const anchor = `"universalName":"${companySlug}"`;
+    let bestGap = Infinity;
+    for (const code of document.querySelectorAll("code")) {
+      const text = code.textContent || "";
+      const at = text.indexOf(anchor);
+      if (at < 0) continue;
+      const windowText = text.slice(Math.max(0, at - 2000), at + 2000);
+      const re = /urn:li:(?:fsd_|fs_normalized_|fs_)?company:(\d+)/g;
+      let m;
+      while ((m = re.exec(windowText))) {
+        const gap = Math.abs(m.index - Math.min(at, 2000));
+        if (gap < bestGap) {
+          bestGap = gap;
+          companyId = m[1];
+        }
+      }
     }
   }
 
@@ -226,6 +275,7 @@ function scrapePostingInPage() {
     title,
     company,
     companySlug,
+    companyId,
     location: jobLocation,
     description,
     url: window.location.href,
@@ -293,7 +343,11 @@ function renderDetection(q, ext) {
   } else {
     bits.push("description not read — scroll it into view and reopen");
   }
-  bits.push(ext.companySlug ? "company page found" : "no company page — using keyword search");
+  bits.push(
+    ext.companyId
+      ? "company filter found"
+      : "no company ID on this page — people searches use the company name as a keyword"
+  );
   // LinkedIn links use plain keywords now. Operators are only worth mentioning
   // if the user typed some, since LinkedIn may silently drop the whole query.
   if (q.operatorCount > 0) {
@@ -1081,6 +1135,7 @@ async function initJobTab(tab) {
   ext.roleName = posting.title || "";
   ext.description = posting.description || "";
   ext.companySlug = posting.companySlug || "";
+  ext.companyId = posting.companyId || "";
   if (!ext.company) ext.company = posting.company || "";
 
   $("src-badge").textContent = ext.source;
