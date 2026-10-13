@@ -72,8 +72,8 @@ export const Caption: React.FC<{ n: number; title: string; sub: string; delay?: 
 };
 
 /** The extension popup's frame: header, tabs, and a body. */
-export const Popup: React.FC<{ tab: string; children: React.ReactNode; delay?: number; badge?: string }> = ({
-  tab, children, delay = 0, badge
+export const Popup: React.FC<{ tab: string; children: React.ReactNode; delay?: number; badge?: string; zoom?: number }> = ({
+  tab, children, delay = 0, badge, zoom
 }) => {
   const p = useIn(delay, 16);
   const square = useIsSquare();
@@ -86,7 +86,7 @@ export const Popup: React.FC<{ tab: string; children: React.ReactNode; delay?: n
         boxShadow: "0 30px 80px rgba(0,0,0,.45)", overflow: "hidden",
         // zoom (not a scale transform) so text is laid out, and rendered, at the
         // bigger size: sharp, and it takes its real space next to the caption.
-        zoom: vertical ? 2.4 : square ? 1.55 : 1.95,
+        zoom: zoom ?? (vertical ? 2.4 : square ? 1.55 : 1.95),
         transform: `scale(${0.92 + 0.08 * p})`, opacity: p, transformOrigin: "center"
       }}
     >
