@@ -1,12 +1,18 @@
 // The trailer: hook -> problem -> product -> four features -> call to action.
 import React from "react";
-import { AbsoluteFill, Series, interpolate, useCurrentFrame } from "remotion";
+import { AbsoluteFill, Audio, Series, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { C, FONT, DEMO } from "./theme";
-import { Line, Caption, Popup, H2, LinkCard, Button, useIn, useOut, useIsSquare, useTyped } from "./ui";
+import { Line, Caption, Popup, H2, LinkCard, Button, useIn, useOut, useIsSquare, useIsVertical, useTyped } from "./ui";
 
 // Scene lengths in frames (30 fps). The total is exported for Root.tsx.
 const LEN = { hook: 120, problem: 96, reveal: 90, job: 180, write: 180, follow: 150, find: 150, cta: 150 };
 export const TRAILER_FRAMES = Object.values(LEN).reduce((a, b) => a + b, 0);
+
+/** Text-only scenes get bigger on 9:16, where there's a lot more height to fill. */
+const Big: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const vertical = useIsVertical();
+  return <div style={{ zoom: vertical ? 1.35 : 1 }}>{children}</div>;
+};
 
 const Backdrop: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const frame = useCurrentFrame();
@@ -27,13 +33,14 @@ const Backdrop: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 /** Caption beside the product (16:9) or above it (1:1). */
 const FeatureLayout: React.FC<{ caption: React.ReactNode; popup: React.ReactNode; len: number }> = ({ caption, popup, len }) => {
   const square = useIsSquare();
+  const vertical = useIsVertical();
   const out = useOut(len);
   return (
     <Backdrop>
       <div
         style={{
           display: "flex", flexDirection: square ? "column" : "row", alignItems: "center",
-          gap: square ? 50 : 110, opacity: out, padding: square ? "0 80px" : 0
+          gap: vertical ? 90 : square ? 50 : 110, opacity: out, padding: square ? "0 80px" : 0
         }}
       >
         <div style={{ width: square ? "100%" : 600 }}>{caption}</div>
@@ -143,7 +150,7 @@ const WriteScene: React.FC = () => {
   return (
     <FeatureLayout
       len={LEN.write}
-      caption={<Caption n={2} title="A ready-to-send message in one click" sub="Their name, the role, and the Job ID, filled in. Free templates, or personalize it with AI." />}
+      caption={<Caption n={2} title="A ready‑to‑send message in one click" sub="Their name, the role, and the Job ID, filled in. Free templates, or personalize it with AI." />}
       popup={
         <Popup tab="Person" delay={8}>
           <div style={{ fontWeight: 700, fontSize: 14 }}>Write message</div>
@@ -180,7 +187,7 @@ const FollowScene: React.FC = () => {
   return (
     <FeatureLayout
       len={LEN.follow}
-      caption={<Caption n={3} title="Never forget a follow-up" sub="Mark someone as messaged and it reminds you in 5 days. Most replies come from the follow-up." />}
+      caption={<Caption n={3} title="Never forget a follow‑up" sub="Mark someone as messaged and it reminds you in 5 days. Most replies come from the follow-up." />}
       popup={
         <Popup tab="Saved" delay={8} badge="3">
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -259,16 +266,18 @@ const JobRow: React.FC<{ t: string; c: string; when: string; isNew: boolean; del
 
 const Cta: React.FC = () => {
   const square = useIsSquare();
+  const vertical = useIsVertical();
   const p = useIn(30);
   return (
     <Backdrop>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 30, padding: "0 70px" }}>
         <Logo size={120} />
-        <Line text="FREE. Open source. One-minute install." size={square ? 60 : 76} />
+        <Line text="FREE. Open source. One‑minute install." size={square ? 60 : 76} />
         <div
           style={{
             opacity: p, transform: `translateY(${(1 - p) * 16}px)`, background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.2)",
-            color: C.white, borderRadius: 14, padding: "16px 30px", fontSize: square ? 30 : 36, fontWeight: 600
+            color: C.white, borderRadius: 14, padding: "16px 30px", fontSize: vertical ? 23 : square ? 30 : 36, fontWeight: 600,
+            whiteSpace: "nowrap"
           }}
         >
           github.com/Doggo21345/linkedin-sourcing-helper
@@ -281,15 +290,17 @@ const Cta: React.FC = () => {
 
 export const Trailer: React.FC = () => (
   <AbsoluteFill style={{ background: C.bg }}>
+    {/* Original track, synthesized by music/make_music.py to fit these scene cuts. */}
+    <Audio src={staticFile("music.wav")} volume={0.9} />
     <Series>
-      <Series.Sequence durationInFrames={LEN.hook}><Hook /></Series.Sequence>
-      <Series.Sequence durationInFrames={LEN.problem}><Problem /></Series.Sequence>
-      <Series.Sequence durationInFrames={LEN.reveal}><Reveal /></Series.Sequence>
+      <Series.Sequence durationInFrames={LEN.hook}><Big><Hook /></Big></Series.Sequence>
+      <Series.Sequence durationInFrames={LEN.problem}><Big><Problem /></Big></Series.Sequence>
+      <Series.Sequence durationInFrames={LEN.reveal}><Big><Reveal /></Big></Series.Sequence>
       <Series.Sequence durationInFrames={LEN.job}><JobScene /></Series.Sequence>
       <Series.Sequence durationInFrames={LEN.write}><WriteScene /></Series.Sequence>
       <Series.Sequence durationInFrames={LEN.follow}><FollowScene /></Series.Sequence>
       <Series.Sequence durationInFrames={LEN.find}><FindScene /></Series.Sequence>
-      <Series.Sequence durationInFrames={LEN.cta}><Cta /></Series.Sequence>
+      <Series.Sequence durationInFrames={LEN.cta}><Big><Cta /></Big></Series.Sequence>
     </Series>
   </AbsoluteFill>
 );

@@ -8,7 +8,7 @@ searches to run yourself.
 
 [![Watch the 37-second trailer](docs/trailer-poster.png)](docs/trailer.mp4)
 
-**[▶ Watch the trailer](docs/trailer.mp4)** (37 seconds). Square version for social: [docs/trailer-square.mp4](docs/trailer-square.mp4).
+**[▶ Watch the trailer](docs/trailer.mp4)** (37 seconds, with music). Also in [square 1:1](docs/trailer-square.mp4) and [vertical 9:16](docs/trailer-vertical.mp4) for social.
 
 ## Install (about 1 minute)
 

@@ -10,5 +10,7 @@ export const Root: React.FC = () => (
     <Composition id="Trailer" component={Trailer} durationInFrames={TRAILER_FRAMES} fps={FPS} width={1920} height={1080} />
     {/* 1:1 for LinkedIn and Instagram feeds, where square takes more of the screen */}
     <Composition id="TrailerSquare" component={Trailer} durationInFrames={TRAILER_FRAMES} fps={FPS} width={1080} height={1080} />
+    {/* 9:16 for TikTok, Instagram Reels, YouTube Shorts, and LinkedIn on phones */}
+    <Composition id="TrailerVertical" component={Trailer} durationInFrames={TRAILER_FRAMES} fps={FPS} width={1080} height={1920} />
   </>
 );

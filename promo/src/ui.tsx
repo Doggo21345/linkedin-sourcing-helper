@@ -16,9 +16,16 @@ export function useOut(duration: number, frames = 10) {
   return interpolate(frame, [duration - frames, duration], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
 }
 
+/** Square or vertical: stack the caption above the product instead of beside it. */
 export function useIsSquare() {
   const { width, height } = useVideoConfig();
   return width / height < 1.2;
+}
+
+/** 9:16 (Reels, TikTok, Shorts): lots of height, so the product can be bigger. */
+export function useIsVertical() {
+  const { width, height } = useVideoConfig();
+  return height / width > 1.4;
 }
 
 /** A line of text that rises and fades in. `caps` words get the accent color. */
@@ -52,8 +59,9 @@ export const Line: React.FC<{ text: string; delay?: number; size?: number; color
 export const Caption: React.FC<{ n: number; title: string; sub: string; delay?: number }> = ({ n, title, sub, delay = 0 }) => {
   const p = useIn(delay);
   const square = useIsSquare();
+  const vertical = useIsVertical();
   return (
-    <div style={{ fontFamily: FONT, opacity: p, transform: `translateX(${(1 - p) * -40}px)`, maxWidth: square ? 900 : 640 }}>
+    <div style={{ fontFamily: FONT, opacity: p, transform: `translateX(${(1 - p) * -40}px)`, maxWidth: square ? 920 : 640, zoom: vertical ? 1.3 : 1 }}>
       <div style={{ display: "inline-block", background: C.accent, color: "#fff", fontWeight: 800, fontSize: 28, borderRadius: 999, padding: "6px 18px", marginBottom: 22 }}>
         {n} of 4
       </div>
@@ -69,6 +77,7 @@ export const Popup: React.FC<{ tab: string; children: React.ReactNode; delay?: n
 }) => {
   const p = useIn(delay, 16);
   const square = useIsSquare();
+  const vertical = useIsVertical();
   const tabs = ["Job", "Person", "Find", "Saved"];
   return (
     <div
@@ -77,7 +86,7 @@ export const Popup: React.FC<{ tab: string; children: React.ReactNode; delay?: n
         boxShadow: "0 30px 80px rgba(0,0,0,.45)", overflow: "hidden",
         // zoom (not a scale transform) so text is laid out, and rendered, at the
         // bigger size: sharp, and it takes its real space next to the caption.
-        zoom: square ? 1.55 : 1.95,
+        zoom: vertical ? 2.4 : square ? 1.55 : 1.95,
         transform: `scale(${0.92 + 0.08 * p})`, opacity: p, transformOrigin: "center"
       }}
     >

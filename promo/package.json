@@ -6,7 +6,9 @@
     "studio": "remotion studio src/index.ts",
     "render": "remotion render src/index.ts Trailer out/trailer.mp4",
     "render:square": "remotion render src/index.ts TrailerSquare out/trailer-square.mp4",
-    "still": "remotion still src/index.ts Trailer out/frame.png --frame=420"
+    "still": "remotion still src/index.ts Trailer out/frame.png --frame=420",
+    "render:vertical": "remotion render src/index.ts TrailerVertical out/trailer-vertical.mp4",
+    "render:all": "npm run render && npm run render:square && npm run render:vertical"
   },
   "dependencies": {
     "@remotion/cli": "4.0.290",
