@@ -97,7 +97,11 @@ export async function openCompose(person, job, { kind = "", onMessaged } = {}) {
   $("compose-messaged").hidden = !onMessaged;
   $("compose").hidden = false;
   render();
-  $("compose-body").focus();
+  // Start at the top of the message, not wherever focus would scroll it.
+  const body = $("compose-body");
+  body.focus();
+  body.setSelectionRange(0, 0);
+  body.scrollTop = 0;
 }
 
 export function wireCompose() {

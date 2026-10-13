@@ -1,3 +1,7 @@
+/* An element's own display rule (e.g. .banner's flex) must not beat the hidden
+   attribute, or hidden things show up empty. */
+[hidden] { display: none !important; }
+
 :root {
   --bg: #ffffff;
   --fg: #1d2226;
@@ -121,3 +125,9 @@ details#more-searches > summary { cursor: pointer; color: var(--accent); font-si
 .due-list .when { font-size: 11px; color: #b42318; width: 100%; }
 .footer { display: flex; justify-content: space-between; margin-top: 12px; padding-top: 6px; border-top: 1px solid var(--border); font-size: 11px; }
 .footer a { color: var(--muted); }
+/* Follow-ups due: the name gets its own line; the actions wrap under it. */
+.due-list li { flex-wrap: wrap; gap: 4px 6px; }
+.due-list .who { flex-basis: 100%; white-space: normal; font-weight: 600; }
+/* Counts sit beside the tab label instead of wrapping under it. */
+.tab { white-space: nowrap; }
+.tab .badge { padding: 0 4px; font-size: 10px; margin-left: 2px; }
