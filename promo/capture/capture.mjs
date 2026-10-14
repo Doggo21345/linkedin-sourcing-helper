@@ -95,7 +95,7 @@ function fakeChrome(scene) {
 }
 
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ["--no-sandbox", "--font-render-hinting=none"] });
-const SCALE = 3;
+const SCALE = 6;  // sharp enough for extreme close-ups
 const RECTS = {};
 const PARTS = {};
 
@@ -163,7 +163,7 @@ await shoot("job", {
 await shoot("person-compose", { height: 640, after: click("#person-write"),
   parts: [["kinds", "#compose-kinds", 4], ["compose-who", "#compose-who", 4], ["copy-btn", "#compose-copy", 3], ["ai-btn", "#compose-ai", 3]] });
 await shoot("person-found", {
-  parts: [["person-card", "#panel-person .meta, #person-name", 6], ["person-result", "#person-result", 4]],
+  parts: [["person-result", "#person-result", 4]],
   after: async (page) => {
     await click("#person-find")(page);
     await new Promise((r) => setTimeout(r, 300));

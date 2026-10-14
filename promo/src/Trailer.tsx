@@ -137,23 +137,84 @@ function useLayout() {
   return { a, titleTop: 80, titleSize: 92, area: { top: 230, bottom: 30 }, tall: false };
 }
 
-/** A fixed-size design surface, scaled to fit the area under the title. Children use stage pixels. */
-const Stage: React.FC<{ w: number; h: number; tilt?: [number, number]; zoom?: number; children: React.ReactNode }> = ({ w, h, tilt = [0, 0], zoom = 1, children }) => {
+// ---- Camera: each UI scene is cut into shots (medium push, extreme close-up, very wide) -------
+
+type Pt = [number, number];
+type Range = [number, number];
+/** One shot: from frame `at` until the next shot. z = zoom, f = focus point (stage px), drifting start -> end. */
+type Shot = { at: number; z: Range; f: [Pt, Pt]; rx?: Range; ry?: Range; rz?: Range; full?: boolean };
+type Cam = { z: number; fx: number; fy: number; rx: number; ry: number; rz: number; full: boolean };
+
+// Moves fast right after a cut and eases off, like a camera move that started before the cut.
+const DRIFT = Easing.bezier(0.2, 0.55, 0.35, 1);
+const sceneLen = (id: string) => V4.scenes.find((x) => x.id === id)!.frames;
+
+function useCam(scene: string, shots: Shot[]): Cam {
+  const f = useCurrentFrame();
+  // A tall frame shows a narrow slice of the stage, so close-ups there need less zoom.
   const L = useLayout();
-  const availW = L.a.width, availH = L.a.height - L.area.top - L.area.bottom;
+  const tallK = L.a.vertical ? 0.6 : L.a.square ? 0.75 : 1;
+  let i = 0;
+  shots.forEach((sh, j) => { if (f >= sh.at) i = j; });
+  const sh = shots[i];
+  const end = shots[i + 1]?.at ?? sceneLen(scene);
+  const p = e(f, sh.at, end, 0, 1, DRIFT);
+  const lerp = (r: Range | undefined) => (r ? r[0] + (r[1] - r[0]) * p : 0);
+  // A hard cut lands a touch too close and settles: the punch of the cut.
+  const settle = i ? 1 + 0.06 * (1 - e(f, sh.at, sh.at + 14)) : 1;
+  return {
+    z: lerp(sh.z) * settle * (sh.full ? tallK : 1), fx: sh.f[0][0] + (sh.f[1][0] - sh.f[0][0]) * p, fy: sh.f[0][1] + (sh.f[1][1] - sh.f[0][1]) * p,
+    rx: lerp(sh.rx), ry: lerp(sh.ry), rz: lerp(sh.rz), full: !!sh.full
+  };
+}
+
+/** Shallow depth of field on close-ups: sharp in the middle, soft toward the edges. */
+const Dof: React.FC = () => (
+  <AbsoluteFill style={{
+    backdropFilter: "blur(9px)", WebkitBackdropFilter: "blur(9px)", pointerEvents: "none",
+    maskImage: "radial-gradient(ellipse 52% 46% at 50% 50%, transparent 40%, black 100%)",
+    WebkitMaskImage: "radial-gradient(ellipse 52% 46% at 50% 50%, transparent 40%, black 100%)"
+  }} />
+);
+
+/**
+ * A fixed-size design surface. Children use stage pixels. With no camera it's scaled to fit the area
+ * under the title; a camera zooms toward its focus point, and close-ups ("full") use the whole frame.
+ */
+const Stage: React.FC<{ w: number; h: number; tilt?: [number, number]; zoom?: number; cam?: Cam; children: React.ReactNode }> = ({
+  w, h, tilt = [0, 0], zoom = 1, cam, children
+}) => {
+  const L = useLayout();
+  const availH = L.a.height - L.area.top - L.area.bottom;
   // zoom > 1 lets content use the stage's empty margins on wide frames.
-  const k = Math.min(availW / w, availH / h) * 0.94 * (L.tall ? 1 : zoom);
+  const k = Math.min(L.a.width / w, availH / h) * 0.94 * (L.tall ? 1 : zoom);
+  const c = cam ?? { z: 1, fx: w / 2, fy: h / 2, rx: 0, ry: 0, rz: 0, full: false };
+  const sx = L.a.width / 2;
+  const sy = c.full ? L.a.height / 2 : L.area.top + availH / 2;
+  const K = k * c.z;
   return (
-    <div style={{ position: "absolute", left: 0, right: 0, top: L.area.top, height: availH, display: "flex", alignItems: "center", justifyContent: "center", perspective: 2400 }}>
-      <div style={{ width: w, height: h, position: "relative", flex: "none", transformStyle: "preserve-3d", transform: `scale(${k}) rotateX(${tilt[0]}deg) rotateY(${tilt[1]}deg)` }}>
-        {children}
-      </div>
-    </div>
+    <>
+      <AbsoluteFill style={{ perspective: 2400, perspectiveOrigin: `${sx}px ${sy}px` }}>
+        <div style={{
+          position: "absolute", left: 0, top: 0, width: w, height: h, transformOrigin: "0 0", transformStyle: "preserve-3d",
+          transform: `translate(${sx - c.fx * K}px, ${sy - c.fy * K}px) scale3d(${K}, ${K}, ${K})`
+        }}>
+          <div style={{
+            position: "absolute", inset: 0, transformStyle: "preserve-3d", transformOrigin: `${c.fx}px ${c.fy}px`,
+            transform: `rotateX(${tilt[0] + c.rx}deg) rotateY(${tilt[1] + c.ry}deg) rotateZ(${c.rz}deg)`
+          }}>
+            {children}
+          </div>
+        </div>
+      </AbsoluteFill>
+      {c.full ? <Dof /> : null}
+    </>
   );
 };
 
-const Title: React.FC<{ text: string; tone: Tone; start?: number }> = ({ text, tone, start = 2 }) => {
+const Title: React.FC<{ text: string; tone: Tone; start?: number; show?: boolean }> = ({ text, tone, start = 2, show = true }) => {
   const L = useLayout();
+  if (!show) return null;
   return (
     <div style={{ position: "absolute", top: L.titleTop, left: 60, right: 60, display: "flex", justifyContent: "center" }}>
       <Kinetic text={text} start={start} size={L.titleSize} tone={tone} stagger={4} />
@@ -282,9 +343,17 @@ const Inbox: React.FC = () => {
   const arrive = MAILS.map((_, i) => e(f, cue("inbox", `mail${i}`) - 4, cue("inbox", `mail${i}`) + 14));
   const back = e(f, cue("inbox", "back"), cue("inbox", "back") + 20, 0, 1, INOUT);
   const W = L.tall ? 940 : 1180;
+  const SW = L.tall ? 1000 : 1400, SH = L.tall ? 900 : 800;
+  // Close-up on "Unfortunately" in the newest mail.
+  const fx = (SW - W) / 2 + (L.tall ? 380 : 470), fy = 182;
+  const cam = useCam("inbox", [
+    { at: 0, z: [1, 1.14], f: [[SW / 2, SH / 2], [SW / 2, SH / 2 - 20]] },
+    { at: cue("inbox", "shotB"), z: [3.0, 3.4], f: [[fx - 80, fy], [fx + 40, fy]], rz: [-3, -1], full: true },
+    { at: cue("inbox", "shotC"), z: [0.82, 0.76], f: [[SW / 2, SH / 2], [SW / 2, SH / 2]], rx: [10, 4] }
+  ]);
   return (
     <>
-      <Stage w={L.tall ? 1000 : 1400} h={L.tall ? 900 : 800}>
+      <Stage w={SW} h={SH} cam={cam}>
         <div style={{
           position: "absolute", left: "50%", top: 30, transform: `translateX(-50%) scale(${1 - 0.1 * back})`, filter: back > 0.01 ? `blur(${10 * back}px)` : undefined,
           opacity: 1 - 0.65 * back
@@ -411,10 +480,17 @@ const Find: React.FC = () => {
     ? { w: 1000, h: 1100, tabs: [40, 0, 2.6], post: [40, 110, 2.6], k: 2.6, cards: [[40, 300], [40, 560], [40, 740]] }
     : { w: 1400, h: 760, tabs: [10, 190, 1.8], post: [10, 270, 1.8], k: 1.9, cards: [[700, 70], [700, 300], [700, 450]] };
   const c0 = W.cards[0];
+  // Close-up: the first card and the pointer clicking it.
+  const [fx, fy] = L.tall ? [470, 400] : [1050, 150];
+  const cam = useCam("find", [
+    { at: 0, z: [1, 1.16], f: [[W.w / 2, W.h / 2], [W.w / 2 + 40, W.h / 2 - 20]] },
+    { at: cue("find", "shotB"), z: [2.5, 2.9], f: [[fx - 70, fy + 10], [fx + 20, fy]], ry: [-8, 2], full: true },
+    { at: cue("find", "shotC"), z: [0.74, 0.66], f: [[W.w / 2, W.h / 2], [W.w / 2, W.h / 2]], rx: [16, 10], ry: [-24, -12] }
+  ]);
   return (
     <>
-      <Title text="Find who's HIRING." tone="paper" />
-      <Stage w={W.w} h={W.h} zoom={1.2} tilt={[e(f, 0, 180, 10, 4, Easing.linear), e(f, 0, 180, L.tall ? 0 : -8, L.tall ? 0 : -3, Easing.linear)]}>
+      <Title text="Find who's HIRING." tone="paper" show={!cam.full} />
+      <Stage w={W.w} h={W.h} zoom={1.2} cam={cam} tilt={[e(f, 0, 180, 10, 4, Easing.linear), e(f, 0, 180, L.tall ? 0 : -8, L.tall ? 0 : -3, Easing.linear)]}>
         <FlyIn at={cue("find", "posting") - 4} x={W.tabs[0]} y={W.tabs[1]} from="below" float={4}><Part name="tabs" k={W.tabs[2]} /></FlyIn>
         <FlyIn at={cue("find", "posting")} x={W.post[0]} y={W.post[1]} from="below" float={5}><Part name="posting" k={W.post[2]} /></FlyIn>
         {[0, 1, 2].map((i) => (
@@ -447,10 +523,17 @@ const Email: React.FC = () => {
   const found = cue("email", "found");
   const pop = e(f, found - 4, found + 18);
   const W = L.tall ? { w: 1000, h: 1100, panel: [40, 0], card: [60, 640], k: 2.5 } : { w: 1400, h: 760, panel: [40, 90], card: [720, 250], k: 1.85 };
+  // Close-up: the found address and its Verified badge (CSS x ~200, y ~13 in the part).
+  const fx = W.card[0] + 18 + (L.tall ? 165 : 200) * W.k, fy = W.card[1] + 18 + 13 * W.k;
+  const cam = useCam("email", [
+    { at: 0, z: [1.05, 1.2], f: L.tall ? [[500, 330], [500, 300]] : [[560, 330], [520, 310]] },
+    { at: cue("email", "shotB"), z: [2.6, 3.0], f: [[fx + 40, fy], [fx - 40, fy]], rz: [2, 0], full: true },
+    { at: cue("email", "shotC"), z: [0.74, 0.66], f: [[W.w / 2, W.h / 2], [W.w / 2, W.h / 2]], rx: [14, 8], ry: [-20, -10] }
+  ]);
   return (
     <>
-      <Title text="Get their EMAIL." tone="ink" />
-      <Stage w={W.w} h={W.h} zoom={1.2}>
+      <Title text="Get their EMAIL." tone="ink" show={!cam.full} />
+      <Stage w={W.w} h={W.h} zoom={1.2} cam={cam}>
         <FlyIn at={6} x={W.panel[0]} y={W.panel[1]} from="left">
           <Glass w={L.tall ? 920 : 640}>
             {STEPS.map(([label, detail], i) => {
@@ -505,11 +588,18 @@ const Write: React.FC = () => {
     : { w: 1400, h: 760, who: [0, 60], kinds: [0, 190], kk: 1.75, card: [640, 0], cw: 760, fs: 27 };
   const ring = PILLS[Math.max(0, pill)];
   const ringOn = pill >= 0 ? 1 : 0;
-  const btnX = W.cw - 200, btnY = L.tall ? 640 : 590;
+  const btn: Pt = [W.cw - 72, L.tall ? 561 : 519];  // the Copy button's center, in card px
+  const kc: Pt = L.tall ? [474, 206] : [295, 243];                       // the message types
+  const tf: [Pt, Pt] = L.tall ? [[370, 420], [400, 580]] : [[940, 140], [970, 300]]; // follows the typing down
+  const cam = useCam("write", [
+    { at: 0, z: [1.45, 1.65], f: [[kc[0] - 30, kc[1]], [kc[0] + 30, kc[1]]] },
+    { at: cue("write", "shotB"), z: [2.3, 2.5], f: tf, full: true },
+    { at: cue("write", "shotC"), z: [1.0, 0.9], f: [[W.w / 2 + 80, W.h / 2 + 40], [W.w / 2, W.h / 2]] }
+  ]);
   return (
     <>
-      <Title text="The message, WRITTEN for you." tone="paper" />
-      <Stage w={W.w} h={W.h} zoom={1.12} tilt={[e(f, 0, 180, 8, 3, Easing.linear), L.tall ? 0 : e(f, 0, 180, 6, 2, Easing.linear)]}>
+      <Title text="The message, WRITTEN for you." tone="paper" show={!cam.full} />
+      <Stage w={W.w} h={W.h} zoom={1.12} cam={cam} tilt={[e(f, 0, 180, 8, 3, Easing.linear), L.tall ? 0 : e(f, 0, 180, 6, 2, Easing.linear)]}>
         <FlyIn at={6} x={W.who[0]} y={W.who[1]} from="below"><Part name="compose-who" k={W.kk} /></FlyIn>
         <FlyIn at={14} x={W.kinds[0]} y={W.kinds[1]} from="below">
           <div style={{ position: "relative" }}>
@@ -533,10 +623,10 @@ const Write: React.FC = () => {
             </div>
           </div>
         </FlyIn>
-        <div style={{ position: "absolute", left: W.card[0] + btnX - 90, top: W.card[1] + btnY - 90, opacity: copied, transform: `translateY(${(1 - copied) * 20}px) scale(${0.9 + 0.1 * copied})` }}>
+        <div style={{ position: "absolute", left: W.card[0] + W.cw - 330, top: W.card[1] + btn[1] - 110, opacity: copied, transform: `translateY(${(1 - copied) * 20}px) scale(${0.9 + 0.1 * copied})` }}>
           <Pill dark size={L.tall ? 30 : 26}><span style={{ color: T.mint }}>✓</span>Copied to clipboard</Pill>
         </div>
-        <Pointer path={[[110, W.w, W.h + 40], [click - 6, W.card[0] + W.cw - 50, W.card[1] + btnY + 22], [180, W.card[0] + W.cw - 50, W.card[1] + btnY + 22]]} clicks={[click]} />
+        <Pointer path={[[110, W.w, W.h + 40], [click - 6, W.card[0] + btn[0], W.card[1] + btn[1]], [180, W.card[0] + btn[0], W.card[1] + btn[1]]]} clicks={[click]} z={30} />
       </Stage>
     </>
   );
@@ -554,10 +644,18 @@ const Follow: React.FC = () => {
   const W = L.tall
     ? { w: 1000, h: 1100, note: [80, 0], nw: 840, panel: [60, 290], k: 2.4 }
     : { w: 1400, h: 760, note: [770, 40], nw: 620, panel: [40, 40], k: 1.95 };
+  const nc: Pt = L.tall ? [500, 65] : [1080, 105];   // the notification
+  const pc: Pt = L.tall ? [482, 607] : [385, 300];   // the follow-ups panel
+  const shotB = cue("follow", "shotB");
+  const cam = useCam("follow", [
+    { at: 0, z: [2.1, 2.35], f: [[nc[0] + 60, nc[1]], [nc[0] - 20, nc[1]]], full: true },
+    { at: shotB, z: [1.3, 1.45], f: [[pc[0], pc[1] - 40], [pc[0], pc[1] + 10]] },
+    { at: cue("follow", "shotC"), z: [0.76, 0.68], f: [[W.w / 2, W.h / 2], [W.w / 2, W.h / 2]], rx: [12, 6], ry: [18, 8] }
+  ]);
   return (
     <>
-      <Title text="Never miss a FOLLOW-UP." tone="ink" />
-      <Stage w={W.w} h={W.h} zoom={1.2}>
+      <Title text="Never miss a FOLLOW-UP." tone="ink" start={shotB} show={!cam.full} />
+      <Stage w={W.w} h={W.h} zoom={1.2} cam={cam}>
         <FlyIn at={30} x={W.panel[0]} y={W.panel[1]} from="below">
           <div style={{ position: "relative", background: "#fff", borderRadius: 24, padding: "14px 10px 10px", boxShadow: "0 40px 100px rgba(0,0,0,.5)" }}>
             <Part name="saved-tabs" k={W.k} pad={4} style={{ boxShadow: "none" }} />
@@ -601,12 +699,19 @@ const Jobs: React.FC = () => {
   const cardH = 92 * k + 22;
   const boards = cue("jobs", "boards");
   const bp = e(f, boards - 4, boards + 18);
+  // Wide wall, then an extreme close-up of one card in it, then pull far back for the boards.
+  const cam = useCam("jobs", [
+    { at: 0, z: [1, 1.12], f: [[0, 0], [0, 0]] },
+    { at: cue("jobs", "shotB"), z: [2.9, 3.2], f: [[-60, 0], [40, 0]], rz: [-2, 0], full: true },
+    { at: cue("jobs", "shotC"), z: [0.72, 0.66], f: [[0, 0], [0, 0]] }
+  ]);
   return (
     <>
-      <Title text="Fresh internships, LIVE." tone="paper" />
-      <div style={{ position: "absolute", left: 0, right: 0, top: L.area.top - 40, bottom: 0, perspective: 1800, overflow: "hidden",
-        maskImage: "linear-gradient(transparent, black 14%, black 80%, transparent)" }}>
-        <div style={{ position: "absolute", left: "50%", top: "50%", display: "flex", gap: 26, transform: `translate(-50%, -50%) rotateX(24deg) rotateZ(-8deg) scale(${L.tall ? 1.15 : 1})`, transformStyle: "preserve-3d" }}>
+      <Title text="Fresh internships, LIVE." tone="paper" show={!cam.full} />
+      <div style={{ position: "absolute", left: 0, right: 0, top: cam.full ? 0 : L.area.top - 40, bottom: 0, perspective: 1800, overflow: "hidden",
+        maskImage: cam.full ? undefined : "linear-gradient(transparent, black 14%, black 80%, transparent)" }}>
+        <div style={{ position: "absolute", left: "50%", top: "50%", display: "flex", gap: 26, transformStyle: "preserve-3d",
+          transform: `translate(-50%, -50%) translate(${-cam.fx * cam.z}px, 0) scale(${(L.tall ? 1.15 : 1) * cam.z}) rotateX(24deg) rotateZ(${-8 + cam.rz}deg)` }}>
           {Array.from({ length: cols }).map((_, c) => {
             const dir = c % 2 ? 1 : -1;
             const y = dir * (f * (2.4 + c * 0.4)) - (c % 2 ? cardH * 6 : 0);
@@ -622,6 +727,7 @@ const Jobs: React.FC = () => {
         opacity: Math.min(1, bp * 2), transform: `translateY(${(1 - bp) * 80}px) scale(${0.9 + 0.1 * bp}) rotate(${(1 - bp) * -6}deg)` }}>
         <Part name="boards" k={L.a.vertical ? 2.7 : 2.2} pad={18} radius={24} style={{ boxShadow: "0 0 0 1px rgba(15,16,26,.08), 0 50px 120px rgba(15,16,26,.35)" }} />
       </div>
+      {cam.full ? <Dof /> : null}
     </>
   );
 };

@@ -6,9 +6,10 @@ Everything is timed from src/v4.json, the same file the video reads:
   cues    -> per-scene sound effects (pop, click, typing, ding, boom...) at the
              exact frame the animation uses
 
-Music: a dark, filtered pad for the problem (0 to "introducing"), a riser,
-a drop into a 120 BPM groove when the product appears, and a bright final
-chord once the call-to-action button is clicked.
+Music: a music-box arpeggio and pad for the problem (0 to "introducing"), a
+snare build and riser, a drop into a 120 BPM groove with a melody hook when the
+product appears, and a bright final chord once the call-to-action button is
+clicked.
 
 Run: python3 music/make_v4.py   ->  public/music.wav
 """
@@ -244,7 +245,20 @@ def fx_shimmer():
     return x * (0.6 + 0.4 * np.sin(2 * np.pi * 6 * t_of(len(x)))), 0.0
 
 
-GAIN = {"whoosh": 0.55, "swish": 0.28, "pop": 0.42, "click": 0.6, "tick": 0.3, "ticks": 0.32, "typing": 0.3,
+def fx_cut():
+    """A camera cut inside a scene: a short whoosh into a soft thump."""
+    x, peak = fx_whoosh(0.32, 0.8)
+    n = int(0.25 * SR)
+    f = 60 + 80 * np.exp(-t_of(n) / 0.02)
+    thump = np.sin(2 * np.pi * np.cumsum(f) / SR) * expdecay(n, 0.06) * 0.6
+    j = int(peak * SR)
+    out = np.zeros(max(len(x), j + n))
+    out[: len(x)] += x
+    out[j: j + n] += thump
+    return out, peak
+
+
+GAIN = {"cut": 0.5, "whoosh": 0.55, "swish": 0.28, "pop": 0.42, "click": 0.6, "tick": 0.3, "ticks": 0.32, "typing": 0.3,
         "ding": 0.55, "success": 0.5, "boom": 0.95, "riser": 0.5, "hit": 0.7, "shimmer": 0.4}
 
 
@@ -255,7 +269,7 @@ def make(kind, c):
         return fx_typing(c.get("len", 60))
     if kind == "riser":
         return fx_riser(c.get("len", 60))
-    return {"whoosh": fx_whoosh, "swish": fx_swish, "pop": fx_pop, "click": fx_click, "tick": fx_tick,
+    return {"cut": fx_cut, "whoosh": fx_whoosh, "swish": fx_swish, "pop": fx_pop, "click": fx_click, "tick": fx_tick,
             "ding": fx_ding, "success": fx_success, "boom": fx_boom, "hit": fx_hit, "shimmer": fx_shimmer}[kind]()
 
 
@@ -268,6 +282,8 @@ for s in V4["scenes"][1:]:
 
 for scene, cues in V4["cues"].items():
     for name, c in cues.items():
+        if c["sfx"] == "none":
+            continue
         x, lead = make(c["sfx"], c)
         t = sec(scene, c["at"]) - lead
         if c["sfx"] == "riser":
@@ -276,123 +292,174 @@ for scene, cues in V4["cues"].items():
         sfx.add(x, t, GAIN[c["sfx"]], pan)
 
 # ---- Music ---------------------------------------------------------------------------------
+# Written for laptop speakers and phones: the hook, chords, and bass all live in the
+# 200 Hz - 4 kHz range those speakers actually play, with only a little sub underneath.
 
 # Am - F - C - G, two seconds (four beats) each.
 CHORDS = [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]]
-ROOTS = [33, 29, 36, 31]
+ROOTS = [45, 41, 48, 43]                 # bass an octave higher than a club track, so it's heard
+# The hook: eighth notes over each chord (None = rest). A minor, around 500-800 Hz.
+HOOK = [
+    [76, None, 72, 74, 76, None, 79, 76],
+    [77, 76, 72, None, 69, None, 72, None],
+    [76, None, 74, 72, 67, None, 72, 76],
+    [74, None, 71, 67, 74, None, 71, None],
+]
+lead = Bus()   # kept out of the sidechain pump so the melody stays steady
 
 
 def chord_at(t):
     return int(t // (4 * BEAT)) % 4
 
 
-# Pad: whole track; dark and filtered before the drop, open after.
-seg = 4 * BEAT
-t = 0.0
-while t < DUR:
-    k = chord_at(t)
-    n = int(seg * SR) + SR // 2
-    tt = t_of(n)
-    pad = sum(saw(hz(m), n, 8) + saw(hz(m) * 1.004, n, 8) for m in CHORDS[k]) / 6
-    before = t < DROP
-    cutoff = (500 + 1400 * min(1, t / DROP)) if before else 2600
-    pad = lowpass(pad, cutoff) * np.minimum(1, tt / 0.4) * np.minimum(1, (n / SR - tt) / 0.5)
-    g = (0.10 + 0.10 * min(1, t / DROP)) if before else 0.16
-    if t >= END_CLICK - seg:
-        g *= 0.6
-    music.add(pad, t, g, pan=-0.1)
-    t += seg
+def supersaw(m, n, voices=5, spread=0.012):
+    return sum(saw(hz(m) * (1 + spread * (v - (voices - 1) / 2) / voices), n, 9) for v in range(voices)) / voices
 
-# Before the drop: a soft heartbeat kick from the inbox, ticking hats in the turn.
-def kick(g=1.0):
-    n = int(0.35 * SR)
+
+def pluck(m, dur=0.3, bright=4200, tau=0.12):
+    n = int(dur * SR)
     tt = t_of(n)
-    f = 46 + 110 * np.exp(-tt / 0.03)
-    return np.sin(2 * np.pi * np.cumsum(f) / SR) * expdecay(n, 0.12) * g
+    x = saw(hz(m), n, 10) * 0.6 + np.sign(np.sin(2 * np.pi * hz(m) * tt)) * 0.25
+    return lowpass(x, bright * np.exp(-tt / 0.08) + 500) * np.minimum(1, tt / 0.003) * np.exp(-tt / tau)
+
+
+def kick(g=1.0):
+    n = int(0.32 * SR)
+    tt = t_of(n)
+    f = 52 + 120 * np.exp(-tt / 0.025)
+    body = np.sin(2 * np.pi * np.cumsum(f) / SR) * expdecay(n, 0.09) * 0.6
+    click = bandnoise(n, 2000, 8000) * expdecay(n, 0.004) * 0.9   # the part small speakers hear
+    return (body + click) * g
 
 
 def hat(open_=False):
-    n = int((0.18 if open_ else 0.05) * SR)
-    return bandnoise(n, 7000, 16000) * expdecay(n, 0.05 if open_ else 0.012)
+    n = int((0.16 if open_ else 0.05) * SR)
+    return bandnoise(n, 6500, 16000) * expdecay(n, 0.05 if open_ else 0.012)
 
 
 def clap():
-    n = int(0.2 * SR)
+    n = int(0.22 * SR)
     x = np.zeros(n)
-    for d in (0, 0.008, 0.017):
+    for d in (0, 0.009, 0.018):
         i = int(d * SR)
-        m = n - i
-        x[i:] += bandnoise(m, 900, 5000) * expdecay(m, 0.03 if d < 0.017 else 0.09)
+        x[i:] += bandnoise(n - i, 800, 6000) * expdecay(n - i, 0.025 if d < 0.018 else 0.11)
     return x
 
 
-b = 0
-while b * BEAT < DROP - 0.1:
-    t = b * BEAT
-    if t >= sec("inbox") and b % 2 == 0:
-        drums.add(kick(0.55), t, 0.8)
-    if t >= sec("turn"):
-        for s16 in range(4):
-            drums.add(hat(), t + s16 * BEAT / 4, 0.08 + 0.04 * (s16 == 2))
-    b += 1
+def snare_roll(t0, t1):
+    """16ths into 32nds, getting louder: the build into the drop."""
+    t = t0
+    while t < t1 - 0.01:
+        u = (t - t0) / (t1 - t0)
+        drums.add(clap(), t, 0.12 + 0.45 * u ** 1.5)
+        t += BEAT / 4 if u < 0.6 else BEAT / 8
 
-# After the drop until the click: the groove.
+
+kicks = []
+
+# 1) Before the drop: a music-box arpeggio and a soft pad, opening up as the problem builds.
+b = 0
+while b * BEAT < DROP - 0.05:
+    t = b * BEAT
+    k = chord_at(t)
+    notes = CHORDS[k] + [CHORDS[k][1] + 12]
+    grow = min(1, t / DROP)
+    for e8 in range(2):
+        m = notes[(b * 2 + e8) % 4] + 12
+        bl = bell(hz(m), 0.9, 0.35)
+        music.add(bl, t + e8 * BEAT / 2, 0.10 + 0.08 * grow, pan=0.3 if e8 else -0.3)
+    if b % 4 == 0:
+        n = int(4 * BEAT * SR) + SR // 3
+        tt = t_of(n)
+        pad = sum(supersaw(m, n, 3) for m in CHORDS[k]) / 3
+        pad = lowpass(pad, 900 + 2200 * grow) * np.minimum(1, tt / 0.5) * np.minimum(1, (n / SR - tt) / 0.4)
+        music.add(pad, t, 0.07 + 0.08 * grow)
+    if t >= sec("inbox") and b % 2 == 0:
+        drums.add(kick(0.5), t, 0.7)
+        kicks.append(t)
+    if t >= sec("turn"):
+        drums.add(hat(), t + BEAT / 2, 0.10)
+    b += 1
+snare_roll(DROP - 4 * BEAT, DROP - 0.06)
+
+# 2) The drop to the click: four-on-the-floor, pumping chords, bass, and the hook.
 b = int(np.ceil(DROP / BEAT))
 while b * BEAT < END_CLICK - 0.02:
     t = b * BEAT
     k = chord_at(t)
-    drums.add(kick(), t, 0.95)
+    beat_in_bar = b % 4
+    drums.add(kick(), t, 0.9)
+    kicks.append(t)
     if b % 2 == 1:
-        drums.add(clap(), t, 0.42, pan=0.05)
-    drums.add(hat(True), t + BEAT / 2, 0.12, pan=0.2)
+        drums.add(clap(), t, 0.5, pan=0.05)
+    drums.add(hat(True), t + BEAT / 2, 0.2, pan=0.2)
     for s16 in (1, 3):
-        drums.add(hat(), t + s16 * BEAT / 4, 0.07, pan=-0.2)
-    # Bass: root eighths, ducked under the kick.
+        drums.add(hat(), t + s16 * BEAT / 4, 0.11, pan=-0.2)
+    # Chords: a bright supersaw on every beat (the sidechain pump makes it breathe).
+    n = int(BEAT * SR)
+    tt = t_of(n)
+    ch = sum(supersaw(m, n) for m in CHORDS[k] + [CHORDS[k][0] + 12]) / 4
+    ch = lowpass(ch, 4200) * np.minimum(1, tt / 0.01) * np.minimum(1, (n / SR - tt) / 0.02)
+    music.add(ch, t, 0.28, pan=-0.05)
+    # Bass: offbeat eighths an octave up, with overtones a laptop can play.
     for e8 in range(2):
-        n = int(BEAT / 2 * SR)
-        tt = t_of(n)
-        bass = lowpass(saw(hz(ROOTS[k]), n, 12), 420) * np.minimum(1, tt / 0.004) * expdecay(n, 0.16)
-        bass *= np.minimum(1, tt / 0.07) if e8 == 0 else 1
-        music.add(bass, t + e8 * BEAT / 2, 0.5)
-    # Arpeggio pluck: 16ths through the chord, an octave up.
-    notes = CHORDS[k] + [CHORDS[k][0] + 12]
-    for s16 in range(4):
-        m = notes[(b * 4 + s16) % 4] + 12
-        n = int(0.22 * SR)
-        pl = lowpass(saw(hz(m), n, 6), 3200 * expdecay(n, 0.05) + 300) * expdecay(n, 0.09)
-        music.add(pl, t + s16 * BEAT / 4, 0.11, pan=0.35 if s16 % 2 else -0.35)
+        n2 = int(BEAT / 2 * SR)
+        tt2 = t_of(n2)
+        bass = lowpass(saw(hz(ROOTS[k]), n2, 16), 1100) * np.minimum(1, tt2 / 0.004) * expdecay(n2, 0.14)
+        bass += np.sin(2 * np.pi * hz(ROOTS[k] - 12) * tt2) * expdecay(n2, 0.14) * 0.2   # a little sub
+        music.add(bass, t + e8 * BEAT / 2, 0.30 if e8 else 0.18)
+    # Hook: eighth notes over the bar.
+    bar_notes = HOOK[k]
+    for e8 in range(2):
+        m = bar_notes[beat_in_bar * 2 + e8]
+        if m is not None:
+            lead.add(pluck(m, 0.34, 5200, 0.16), t + e8 * BEAT / 2, 0.42, pan=0.08)
+            lead.add(pluck(m + 12, 0.2, 6000, 0.08), t + e8 * BEAT / 2, 0.10, pan=-0.2)   # sparkle octave
     b += 1
 
-# The final chord: bright C major add9, ringing out after the click.
+# 3) The click: the beat stops, a bright final chord and a bell ring out.
 t = END_CLICK
 n = int((DUR - t + 0.5) * SR)
 tt = t_of(n)
-chord = sum(saw(hz(m), n, 8) + saw(hz(m) * 1.003, n, 8) for m in [48, 55, 60, 64, 67, 74]) / 12
-chord = lowpass(chord, 3000) * np.minimum(1, tt / 0.03) * np.exp(-tt / 3.0)
-music.add(chord, t, 0.32)
-music.add(bell(hz(76), DUR - t, 1.6), t + 0.05, 0.12, pan=0.2)
+chord = sum(supersaw(m, n) for m in [48, 55, 60, 64, 67, 74]) / 6
+chord = lowpass(chord, 3800) * np.minimum(1, tt / 0.02) * np.exp(-tt / 2.6)
+music.add(chord, t, 0.30)
+lead.add(pluck(76, 1.6, 5000, 0.7), t, 0.32)
+lead.add(bell(hz(88), DUR - t, 1.4), t + 0.12, 0.10, pan=0.2)
 
 # ---- Mix -----------------------------------------------------------------------------------
 
-m = music.stereo()
-m = np.vstack([reverb(m[0], 2.0, 0.3), reverb(m[1], 2.1, 0.3)])
+# Sidechain pump: the chords and bass duck on every kick and swell back.
+pump = np.ones(N)
+for kt in kicks:
+    i = int(kt * SR)
+    j = min(N, i + int(0.45 * SR))
+    if i < N:
+        pump[i:j] = np.minimum(pump[i:j], 1 - 0.65 * np.exp(-t_of(j - i) / 0.11))
+
+m = music.stereo() * pump
+m = np.vstack([reverb(m[0], 1.8, 0.22), reverb(m[1], 1.9, 0.22)])
+ld = lead.stereo()
+ld = np.vstack([reverb(ld[0], 1.6, 0.25), reverb(ld[1], 1.7, 0.25)])
 d = drums.stereo()
 s = sfx.stereo()
-s = np.vstack([reverb(s[0], 1.2, 0.18), reverb(s[1], 1.25, 0.18)])
+s = np.vstack([reverb(s[0], 1.2, 0.16), reverb(s[1], 1.25, 0.16)])
 
-# Duck the music under the boom so it hits clean.
+# Duck the music under the boom so it hits clean, with a breath of silence before the drop.
 duck = np.ones(N)
-i = int(DROP * SR)
-j = min(N, i + int(1.2 * SR))
-duck[i:j] = 1 - 0.7 * np.exp(-t_of(j - i) / 0.35)
-# Brief silence right before the drop, for contrast.
-k0 = int((DROP - 0.12) * SR)
-duck[k0:i] = np.linspace(1, 0.15, i - k0)
+i = int(cue_t("intro", "card") * SR)
+j = min(N, i + int(1.0 * SR))
+duck[i:j] = 1 - 0.55 * np.exp(-t_of(j - i) / 0.3)
+k0, k1 = int((DROP - 0.1) * SR), int(DROP * SR)
+duck[k0:k1] = np.linspace(1, 0.1, k1 - k0)
 
-mix = (m * 0.9 + d * 0.85) * duck + s * 1.0
+mix = (m * 1.0 + ld * 1.0 + d * 0.8) * duck + s * 0.85
+for ch in range(2):
+    mix[ch] = highpass(mix[ch], 32)          # nothing useful below 32 Hz
+    mix[ch] -= 0.45 * lowpass(mix[ch], 140)  # tilt toward the mids that small speakers play
 fade_out = np.clip((DUR - t_of(N)) / 1.5, 0, 1)
 mix *= fade_out
-mix = np.tanh(mix * 1.3) / np.tanh(1.3)
+mix = np.tanh(mix * 2.2) / np.tanh(2.2)
 mix *= 0.89 / np.max(np.abs(mix))
 
 out = os.path.join(HERE, "..", "public", "music.wav")
