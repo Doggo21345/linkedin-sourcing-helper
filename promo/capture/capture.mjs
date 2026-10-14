@@ -13,8 +13,10 @@ import puppeteer from "puppeteer-core";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const EXT = path.resolve(HERE, "../..");
 const OUT = path.resolve(HERE, "../public/shots");
+const PARTS_OUT = path.resolve(HERE, "../public/parts");
 const CHROME = process.env.CHROME || path.resolve(HERE, "../node_modules/.remotion/chrome-headless-shell/linux64/chrome-headless-shell-linux64/chrome-headless-shell");
 fs.mkdirSync(OUT, { recursive: true });
+fs.mkdirSync(PARTS_OUT, { recursive: true });
 
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png", ".json": "application/json" };
 const server = http.createServer((req, res) => {
@@ -95,8 +97,9 @@ function fakeChrome(scene) {
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ["--no-sandbox", "--font-render-hinting=none"] });
 const SCALE = 3;
 const RECTS = {};
+const PARTS = {};
 
-async function shoot(scene, { after, height, selector = "body" } = {}) {
+async function shoot(scene, { after, height, parts = [] } = {}) {
   const page = await browser.newPage();
   await page.setViewport({ width: 360, height: height || 900, deviceScaleFactor: SCALE });
   await page.evaluateOnNewDocument(fakeChrome, scene);
@@ -122,6 +125,18 @@ async function shoot(scene, { after, height, selector = "body" } = {}) {
     return [s, { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }];
   })), ["#start-links", "#start-links li", "#compose-copy", "#compose-body", "#due-section", "#due-list li", "#board-results", "#board-results li", "#person-find", "#person-result", "#tab-saved"]);
   RECTS[scene].height = h;
+  // Single UI pieces (a card, a button, a row), cut out so the trailer can animate them one by one.
+  for (const [name, sel, pad = 4] of parts) {
+    const boxes = await page.evaluate((sel) => [...document.querySelectorAll(sel)].filter((e) => e.getClientRects().length).map((e) => {
+      const r = e.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height };
+    }), sel);
+    for (const [i, b] of boxes.entries()) {
+      const id = boxes.length > 1 || sel.endsWith(" li") ? `${name}-${i}` : name;
+      const clip = { x: Math.max(0, b.x - pad), y: Math.max(0, b.y - pad), width: Math.min(360, b.w + 2 * pad), height: b.h + 2 * pad };
+      await page.screenshot({ path: path.join(PARTS_OUT, `${id}.png`), clip });
+      PARTS[id] = { w: Math.round(clip.width), h: Math.round(clip.height) };
+    }
+  }
   console.log(`${scene}: ${360 * SCALE}x${h * SCALE}${errors.length ? "  ERRORS: " + errors.join(" | ") : ""}`);
   await page.close();
 }
@@ -129,6 +144,7 @@ async function shoot(scene, { after, height, selector = "body" } = {}) {
 const click = (sel) => async (page) => { await page.click(sel); await new Promise((r) => setTimeout(r, 300)); };
 
 await shoot("job", {
+  parts: [["header", "header", 0], ["tabs", "nav.tabs", 2], ["posting", "#posting .meta", 6], ["start", "#start-links li", 3]],
   after: async (page) => {
     // Hide the long tail so the shot is the part that matters: posting + Start here.
     await page.evaluate(() => {
@@ -144,16 +160,19 @@ await shoot("job", {
     });
   }
 });
-await shoot("person-compose", { height: 640, after: click("#person-write") });
+await shoot("person-compose", { height: 640, after: click("#person-write"),
+  parts: [["kinds", "#compose-kinds", 4], ["compose-who", "#compose-who", 4], ["copy-btn", "#compose-copy", 3], ["ai-btn", "#compose-ai", 3]] });
 await shoot("person-found", {
+  parts: [["person-card", "#panel-person .meta, #person-name", 6], ["person-result", "#person-result", 4]],
   after: async (page) => {
     await click("#person-find")(page);
     await new Promise((r) => setTimeout(r, 300));
     await page.evaluate(() => { document.querySelector(".footer").style.display = "none"; });
   }
 });
-await shoot("saved", { after: async (page) => page.evaluate(() => { document.querySelector(".footer").style.display = "none"; }) });
+await shoot("saved", { parts: [["due", "#due-list li", 3], ["saved-tabs", "nav.tabs", 2]], after: async (page) => page.evaluate(() => { document.querySelector(".footer").style.display = "none"; }) });
 await shoot("find", {
+  parts: [["job", "#board-results li", 3], ["boards", "#board-picks", 4]],
   after: async (page) => {
     await new Promise((r) => setTimeout(r, 300));
     await page.evaluate(() => {
@@ -164,5 +183,6 @@ await shoot("find", {
 });
 
 fs.writeFileSync(path.join(OUT, "rects.json"), JSON.stringify(RECTS, null, 2));
+fs.writeFileSync(path.join(PARTS_OUT, "parts.json"), JSON.stringify(PARTS, null, 2));
 await browser.close();
 server.close();

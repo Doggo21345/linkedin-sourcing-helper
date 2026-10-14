@@ -8,7 +8,7 @@ music always lands on the cuts:
   every cut   a whoosh into it and a low hit on it
   end         drums drop out, a final chord rings and fades
 
-Run: python3 music/make_music.py   ->  public/music.wav
+Run: python3 music/make_music.py   ->  public/music-v3.wav
 """
 import json
 import os
@@ -17,7 +17,7 @@ import wave
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-TL = json.load(open(os.path.join(HERE, "..", "src", "timeline.json")))
+TL = json.load(open(os.path.join(HERE, "..", "src", "timeline-v3.json")))
 FPS = TL["fps"]
 # Shots overlap by `transition` frames while they crossfade; a cut lands in the
 # middle of each crossfade.
@@ -203,7 +203,7 @@ mix *= fade_in * fade_out
 mix = np.tanh(mix * 1.4) / np.tanh(1.4)
 mix *= 0.89 / np.max(np.abs(mix))       # about -1 dBFS peak
 
-out = os.path.join(HERE, "..", "public", "music.wav")
+out = os.path.join(HERE, "..", "public", "music-v3.wav")
 with wave.open(out, "wb") as w:
     w.setnchannels(2); w.setsampwidth(2); w.setframerate(SR)
     w.writeframes((mix.T * 32767).astype(np.int16).tobytes())
